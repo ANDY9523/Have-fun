@@ -63,7 +63,7 @@
   var geo = { cx: 0, topY: 0, baseY: 0, h: 0, maxR: 0 };
   var TIERS = 5;
 
-  var tiers = [];      // 每层的几何
+  var branches = [];
   var lights = [];
   var orns = [];
   var stars = [];
@@ -83,6 +83,7 @@
   ];
 
   function rnd(a, b) { return a + Math.random() * (b - a); }
+  function quad(a, c, b, t) { var u = 1 - t; return u * u * a + 2 * u * t * c + t * t * b; }
 
   // ---------- 尺寸 ----------
   function resize() {
@@ -107,57 +108,107 @@
     bakeTree();
   }
 
-  // ---------- 生成 ----------
+  // ---------- 五层枝桠 ----------
   function build() {
-    tiers = [];
-    for (var i = 0; i < TIERS; i++) {
-      var uTop = i / TIERS;
-      var uBot = (i + 1) / TIERS;
-      tiers.push({
-        yTop: geo.topY + geo.h * uTop * 0.99 - (i === 0 ? 0 : geo.h * 0.065),
-        yBot: geo.topY + geo.h * uBot * 0.99,
-        halfW: geo.maxR * Math.pow(uBot, 1.06),
-        idx: i
-      });
+    branches = [];
+
+    for (var ti = 0; ti < TIERS; ti++) {
+      var u0 = ti / TIERS;
+      var u1 = (ti + 1) / TIERS;
+
+      var yTop = geo.topY + geo.h * u0 * 0.96;
+      var yBot = geo.topY + geo.h * u1 * 0.96;
+      var rBot = geo.maxR * Math.pow(u1, 1.08);
+      var rTop = ti === 0 ? geo.maxR * 0.015 : geo.maxR * Math.pow(u0, 1.08) * 0.40;
+
+      var count = Math.round(80 + 55 * ti);      // 下层更密
+
+      for (var b = 0; b < count; b++) {
+        var f = Math.pow(Math.random(), 0.85);   // 0 层顶 → 1 层底
+        var y = yTop + (yBot - yTop) * f;
+        var R = rTop + (rBot - rTop) * f;
+
+        var side = Math.random() < 0.5 ? -1 : 1;
+        var spread = R * rnd(0.72, 1.04);
+        var x0 = geo.cx + rnd(-R * 0.06, R * 0.06);
+        var y0 = y + rnd(-3, 3);
+        var x1 = geo.cx + side * spread;
+        var y1 = y0 + spread * rnd(0.05, 0.14);          // 下垂
+        var cxp = x0 + side * spread * 0.55;
+        var cyp = Math.min(y0, y1) - spread * rnd(0.02, 0.08);
+
+        var br = {
+          x0: x0, y0: y0, cxp: cxp, cyp: cyp, x1: x1, y1: y1,
+          side: side,
+          depth: ti + f * 0.9,
+          w: rnd(0.6, 1.7) * (0.55 + 0.85 * f),
+          light: rnd(12, 24) + f * 8,
+          hue: 146 + rnd(-8, 14),
+          sat: rnd(24, 44)
+        };
+        branches.push(br);
+
+        // 子枝
+        var subs = Math.round(rnd(1, 3));
+        for (var s = 0; s < subs; s++) {
+          var tt = rnd(0.45, 0.9);
+          var sx = quad(br.x0, br.cxp, br.x1, tt);
+          var sy = quad(br.y0, br.cyp, br.y1, tt);
+          var sLen = spread * rnd(0.16, 0.34);
+          branches.push({
+            x0: sx, y0: sy,
+            x1: sx + side * sLen,
+            y1: sy + sLen * rnd(0.25, 0.6),
+            cxp: sx + side * sLen * 0.5,
+            cyp: sy + sLen * 0.05,
+            side: side, depth: br.depth + 0.02,
+            w: rnd(0.35, 0.85),
+            light: br.light + rnd(1, 6),
+            hue: br.hue, sat: br.sat
+          });
+        }
+      }
     }
 
+    branches.sort(function (a, b) { return a.depth - b.depth; });
+
+    // 灯珠 / 彩球
     lights = [];
     orns = [];
-    for (var ti = 0; ti < tiers.length; ti++) {
-      var T = tiers[ti];
-      var lightN = 14 + ti * 6;
-      for (var l = 0; l < lightN; l++) {
-        var fy = rnd(T.yTop + (T.yBot - T.yTop) * 0.35, T.yBot + 6);
-        var ratio = (fy - T.yTop) / (T.yBot - T.yTop);
-        var hw = T.halfW * Math.max(0.15, ratio);
-        lights.push({
-          x: geo.cx + rnd(-hw * 0.95, hw * 0.95),
-          y: fy,
-          r: rnd(0.9, 1.7),
-          ph: rnd(0, Math.PI * 2),
-          sp: rnd(0.8, 2.2),
-          warm: Math.random() < 0.78
-        });
-      }
-      var ornN = 5 + ti * 2;
-      for (var o = 0; o < ornN; o++) {
-        var oy = rnd(T.yTop + (T.yBot - T.yTop) * 0.4, T.yBot);
-        var oratio = (oy - T.yTop) / (T.yBot - T.yTop);
-        var ohw = T.halfW * Math.max(0.2, oratio) * 0.95;
-        orns.push({
-          x: geo.cx + rnd(-ohw, ohw),
-          y: oy,
-          r: rnd(2.6, 5.0),
-          col: ORN_COLORS[orns.length % ORN_COLORS.length],
-          ph: rnd(0, Math.PI * 2),
-          sp: rnd(0.5, 1.3)
-        });
-      }
+    var picks = branches.slice();
+    for (var i = picks.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = picks[i]; picks[i] = picks[j]; picks[j] = tmp;
+    }
+    var lightN = Math.round(Math.min(120, Math.max(55, W / 5)));
+    for (var l = 0; l < lightN && l < picks.length; l++) {
+      var pb = picks[l];
+      var lt = rnd(0.35, 1.0);
+      lights.push({
+        x: quad(pb.x0, pb.cxp, pb.x1, lt),
+        y: quad(pb.y0, pb.cyp, pb.y1, lt),
+        r: rnd(0.9, 1.7),
+        ph: rnd(0, Math.PI * 2),
+        sp: rnd(0.8, 2.2),
+        warm: Math.random() < 0.78
+      });
+    }
+    var ornN = Math.round(Math.min(48, Math.max(24, W / 12)));
+    for (var o = 0; o < ornN && o < picks.length; o++) {
+      var ob = picks[picks.length - 1 - o];
+      var ot = rnd(0.5, 1.0);
+      orns.push({
+        x: quad(ob.x0, ob.cxp, ob.x1, ot),
+        y: quad(ob.y0, ob.cyp, ob.y1, ot) + rnd(1, 3),
+        r: rnd(2.6, 5.0),
+        ph: rnd(0, Math.PI * 2),
+        sp: rnd(0.5, 1.3)
+      });
     }
 
     stars = [];
     var sn = Math.round(Math.min(200, W / 5));
-    for (var s = 0; s < sn; s++) {
+    for (var s2 = 0; s2 < sn; s2++) {
       stars.push({
         x: Math.random() * W, y: Math.random() * H * 0.88,
         r: rnd(0.3, 1.2), a: rnd(0.12, 0.65),
@@ -167,7 +218,7 @@
 
     snow = [];
     var nf = Math.round(Math.min(150, Math.max(50, W / 5.4)));
-    for (var f = 0; f < nf; f++) {
+    for (var f2 = 0; f2 < nf; f2++) {
       snow.push({
         x: Math.random() * W, y: Math.random() * H,
         r: rnd(0.5, 2.0), vy: rnd(10, 36), drift: rnd(-8, 8),
@@ -251,44 +302,64 @@
     bgCanvas = c;
   }
 
-  // ---------- 树：五层裙片 ----------
+  // ---------- 树 ----------
   function bakeTree() {
     var c = document.createElement('canvas');
     c.width = Math.round(W * DPR); c.height = Math.round(H * DPR);
     var g = c.getContext('2d');
     g.setTransform(DPR, 0, 0, DPR, 0, 0);
 
-    // 底层暗色锥体：让层间缺口读作阴影，而不是透出夜空
-    (function () {
-      g.beginPath();
-      g.moveTo(geo.cx, geo.topY);
-      g.lineTo(geo.cx - geo.maxR * 1.02, geo.baseY + geo.maxR * 0.02);
-      g.lineTo(geo.cx + geo.maxR * 1.02, geo.baseY + geo.maxR * 0.02);
-      g.closePath();
-      var bgGrad = g.createLinearGradient(0, geo.topY, 0, geo.baseY);
-      bgGrad.addColorStop(0, 'hsl(150, 30%, 5%)');
-      bgGrad.addColorStop(1, 'hsl(150, 28%, 6.5%)');
-      g.fillStyle = bgGrad;
-      g.fill();
-    })();
-    // 每层从下往上画？不，从上往下，下层压住上层
-    for (var i = 0; i < tiers.length; i++) drawTier(g, tiers[i], i);
+    // 暗色内芯：缝隙里是阴影，不是天空
+    for (var kk = 0; kk <= 1.0001; kk += 1 / 40) {
+      var yy = geo.topY + geo.h * kk;
+      var rx = geo.maxR * Math.pow(kk, 1.07) * 0.98;
+      var ry = Math.max(0.8, rx * 0.13);
+      g.fillStyle = 'hsla(150, 30%, ' + (7 + 4 * kk).toFixed(1) + '%, ' + (0.94 + 0.04 * kk) + ')';
+      g.beginPath(); g.ellipse(geo.cx, yy, rx, ry, 0, 0, Math.PI * 2); g.fill();
+    }
+
+    // 枝 + 针叶
+    g.lineCap = 'round';
+    for (var i = 0; i < branches.length; i++) drawBranch(g, branches[i]);
+
+    // 层间的横向阴影：五层分界的来源
+    g.save();
+    for (var t2 = 1; t2 < TIERS; t2++) {
+      var uu = t2 / TIERS;
+      var yLine = geo.topY + geo.h * uu * 0.96;
+      var rLine = geo.maxR * Math.pow(uu, 1.08);
+      var bandH = geo.h * 0.045;
+      var lg = g.createLinearGradient(0, yLine - bandH * 1.2, 0, yLine + bandH * 0.5);
+      lg.addColorStop(0, 'rgba(0,0,0,0)');
+      lg.addColorStop(0.55, 'rgba(0,0,0,0.46)');
+      lg.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = lg;
+      g.fillRect(geo.cx - rLine, yLine - bandH, rLine * 2, bandH * 1.8);
+    }
+    g.restore();
 
     // 整体明暗
     g.globalCompositeOperation = 'source-atop';
+    var sg = g.createLinearGradient(geo.cx - geo.maxR, 0, geo.cx + geo.maxR, 0);
+    sg.addColorStop(0, 'rgba(0,0,0,0.40)');
+    sg.addColorStop(0.36, 'rgba(0,0,0,0.04)');
+    sg.addColorStop(0.64, 'rgba(0,0,0,0)');
+    sg.addColorStop(1, 'rgba(0,0,0,0.28)');
+    g.fillStyle = sg; g.fillRect(0, 0, W, H);
+
     var vg = g.createLinearGradient(0, geo.topY, 0, geo.baseY);
     vg.addColorStop(0, 'rgba(0,0,0,0.10)');
-    vg.addColorStop(0.5, 'rgba(0,0,0,0)');
-    vg.addColorStop(1, 'rgba(0,0,0,0.42)');
+    vg.addColorStop(0.55, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(0,0,0,0.44)');
     g.fillStyle = vg; g.fillRect(0, 0, W, H);
 
     g.globalCompositeOperation = 'lighter';
-    var hg = g.createRadialGradient(geo.cx - geo.maxR * 0.45, geo.topY + geo.h * 0.22, 0, geo.cx - geo.maxR * 0.45, geo.topY + geo.h * 0.22, geo.maxR * 1.25);
-    hg.addColorStop(0, 'rgba(150, 210, 255, 0.13)');
+    var hg = g.createRadialGradient(geo.cx - geo.maxR * 0.45, geo.topY + geo.h * 0.24, 0, geo.cx - geo.maxR * 0.45, geo.topY + geo.h * 0.24, geo.maxR * 1.2);
+    hg.addColorStop(0, 'rgba(150, 210, 255, 0.11)');
     hg.addColorStop(1, 'rgba(150, 210, 255, 0)');
     g.fillStyle = hg; g.fillRect(0, 0, W, H);
 
-    // 雪地 + 礼物（不画树干）
+    // 雪地 + 礼物（无树干）
     g.globalCompositeOperation = 'source-over';
     drawGround(g);
     drawGifts(g);
@@ -303,124 +374,51 @@
     var gg2 = gc.getContext('2d');
     gg2.drawImage(c, 0, 0, gc.width, gc.height);
     gg2.globalCompositeOperation = 'source-in';
-    gg2.fillStyle = 'rgba(120, 190, 255, 0.92)';
+    gg2.fillStyle = 'rgba(120, 190, 255, 0.9)';
     gg2.fillRect(0, 0, gc.width, gc.height);
     glowCanvas = gc;
   }
 
-  function tierPath(g, T) {
-    var cx = geo.cx, halfW = T.halfW;
-    var over = (T.yBot - T.yTop) * 0.22;          // 裙摆稍微压过下一层
-    var yB = T.yBot + over;
+  function drawBranch(g, b) {
     g.beginPath();
-    g.moveTo(cx, T.yTop);
-    g.quadraticCurveTo(cx - halfW * 0.52, T.yTop + (yB - T.yTop) * 0.55, cx - halfW, yB);
-    var segs = 9;
-    for (var s = 1; s <= segs; s++) {
-      var x0 = cx - halfW + (2 * halfW) * (s - 1) / segs;
-      var x1 = cx - halfW + (2 * halfW) * s / segs;
-      var mx = (x0 + x1) / 2;
-      g.quadraticCurveTo(mx, yB + geo.maxR * 0.030, x1, yB);
-    }
-    g.quadraticCurveTo(cx + halfW * 0.52, T.yTop + (yB - T.yTop) * 0.55, cx, T.yTop);
-    g.closePath();
-    return yB;
-  }
+    g.moveTo(b.x0, b.y0);
+    g.quadraticCurveTo(b.cxp, b.cyp, b.x1, b.y1);
+    g.lineWidth = b.w;
+    g.strokeStyle = 'hsl(' + b.hue + ',' + (b.sat * 0.55) + '%,' + (b.light * 0.5) + '%)';
+    g.stroke();
 
-  function drawTier(g, T, idx) {
-    var cx = geo.cx;
-    var yB = tierPath(g, T);
+    var steps = 14;
+    for (var s = 1; s <= steps; s++) {
+      var t = s / steps;
+      var px = quad(b.x0, b.cxp, b.x1, t);
+      var py = quad(b.y0, b.cyp, b.y1, t);
+      var dx = 2 * (1 - t) * (b.cxp - b.x0) + 2 * t * (b.x1 - b.cxp);
+      var dy = 2 * (1 - t) * (b.cyp - b.y0) + 2 * t * (b.y1 - b.cyp);
+      var ang = Math.atan2(dy, dx);
+      var fan = 3 + Math.round(2 * (1 - t));
 
-    // 底
-    var grad = g.createLinearGradient(0, T.yTop, 0, yB);
-    var l0 = 12.5 + idx * 1.2;
-    var l1 = 20 + idx * 1.6;
-    grad.addColorStop(0, 'hsl(148, 34%, ' + l0 + '%)');
-    grad.addColorStop(0.55, 'hsl(146, 36%, ' + l1 + '%)');
-    grad.addColorStop(1, 'hsl(150, 32%, ' + (l1 + 4) + '%)');
-    g.fillStyle = grad;
-    g.fill();
-
-    // 针叶纹理（裁剪在层内）
-    g.save();
-    g.clip();
-    var area = (yB - T.yTop) * T.halfW * 2;
-    var n = Math.round(Math.min(9000, area / 11));
-    g.lineCap = 'round';
-    for (var i = 0; i < n; i++) {
-      var yy = rnd(T.yTop, yB + geo.maxR * 0.02);
-      var rel = (yy - T.yTop) / Math.max(1, (yB - T.yTop));
-      var hw = T.halfW * Math.max(0.08, rel) * rnd(0.15, 1.0);
-      var xx = cx + rnd(-hw, hw);
-      var len = rnd(1.6, 5);
-      var ang = rnd(-Math.PI, Math.PI);
-      g.beginPath();
-      g.moveTo(xx, yy);
-      g.lineTo(xx + Math.cos(ang) * len, yy + Math.sin(ang) * len);
-      g.lineWidth = rnd(0.3, 0.75);
-      g.strokeStyle = 'hsla(' + rnd(140, 164) + ',' + rnd(26, 50) + '%,' + rnd(l0, l1 + 18) + '%,' + rnd(0.45, 0.95) + ')';
-      g.stroke();
-    }
-    g.restore();
-
-    // 层内的枝股：从层顶向底边散开，避免大片平涂
-    g.save();
-    g.lineCap = 'round';
-    var bn = Math.round(28 + 26 * idx / 4);
-    for (var bi = 0; bi < bn; bi++) {
-      var bside = Math.random() < 0.5 ? -1 : 1;
-      var bx1 = cx + bside * T.halfW * rnd(0.25, 1.0);
-      var by1 = yB + rnd(-2, 6);
-      var bx0 = cx + rnd(-T.halfW * 0.06, T.halfW * 0.06);
-      var by0 = T.yTop + rnd(0, 6);
-      g.beginPath();
-      g.moveTo(bx0, by0);
-      g.quadraticCurveTo((bx0 + bx1) / 2, (by0 + by1) / 2 - rnd(6, 18), bx1, by1);
-      g.lineWidth = rnd(0.6, 1.5);
-      g.strokeStyle = 'hsla(' + rnd(142, 158) + ',' + rnd(28, 44) + '%,' + rnd(l0 + 4, l1 + 10) + '%,' + rnd(0.25, 0.55) + ')';
-      g.stroke();
-    }
-    g.restore();
-    // 左右边缘的碎针，避免直边太生硬
-    g.save();
-    g.lineCap = 'round';
-    for (var ee = 0; ee < 2; ee++) {
-      var sgn = ee === 0 ? -1 : 1;
-      var cnt = Math.round(90 + 60 * idx / 4);
-      for (var ei = 0; ei < cnt; ei++) {
-        var et = Math.pow(Math.random(), 0.8);
-        var ey = T.yTop + (yB - T.yTop) * et;
-        var ehw = T.halfW * Math.max(0.06, (ey - T.yTop) / Math.max(1, (yB - T.yTop)));
-        var ex = cx + sgn * ehw;
-        var elen = rnd(3, 9);
-        var eang = (sgn > 0 ? 0 : Math.PI) + rnd(-0.7, 0.7);
+      for (var n = 0; n < fan; n++) {
+        var na = ang + rnd(-0.95, 0.95) + (b.side > 0 ? 0.2 : -0.2);
+        var len = rnd(2, 7) * (0.55 + 0.75 * t);
         g.beginPath();
-        g.moveTo(ex, ey);
-        g.lineTo(ex + Math.cos(eang) * elen, ey + Math.sin(eang) * elen + rnd(-1, 3));
-        g.lineWidth = rnd(0.35, 0.85);
-        g.strokeStyle = 'hsla(' + rnd(142, 162) + ',' + rnd(24, 48) + '%,' + rnd(l0 + 3, l1 + 16) + '%,' + rnd(0.4, 0.85) + ')';
+        g.moveTo(px, py);
+        g.lineTo(px + Math.cos(na) * len, py + Math.sin(na) * len + 1.3);
+        g.lineWidth = rnd(0.35, 0.8);
+        g.strokeStyle = 'hsla(' + b.hue + ',' + rnd(22, 48) + '%,' + rnd(b.light - 6, b.light + 16) + '%,' + rnd(0.45, 0.9) + ')';
         g.stroke();
       }
     }
-    g.restore();
-    // 层顶阴影（上一层投下来的）
-    g.save();
-    g.clip();
-    var sh = g.createLinearGradient(0, T.yTop, 0, T.yTop + (yB - T.yTop) * 0.22);
-    sh.addColorStop(0, 'rgba(0,0,0,0.45)');
-    sh.addColorStop(1, 'rgba(0,0,0,0)');
-    g.fillStyle = sh;
-    g.fillRect(cx - T.halfW, T.yTop, T.halfW * 2, (yB - T.yTop) * 0.24);
-    g.restore();
 
-    // 裙摆亮边
-    g.save();
-    g.globalCompositeOperation = 'lighter';
-    g.strokeStyle = 'hsla(110, 40%, 62%, 0.20)';
-    g.lineWidth = 1.1;
-    tierPath(g, T);
-    g.stroke();
-    g.restore();
+    for (var k2 = 0; k2 < 5; k2++) {
+      var ta = rnd(-1.3, 1.3) + (b.y1 > b.y0 ? 0.55 : 0);
+      var tl = rnd(3, 8);
+      g.beginPath();
+      g.moveTo(b.x1, b.y1);
+      g.lineTo(b.x1 + Math.cos(ta) * tl, b.y1 + Math.sin(ta) * tl);
+      g.lineWidth = rnd(0.35, 0.75);
+      g.strokeStyle = 'hsla(' + b.hue + ', 40%, ' + rnd(b.light + 8, b.light + 24) + '%, 0.9)';
+      g.stroke();
+    }
   }
 
   function drawGround(g) {
