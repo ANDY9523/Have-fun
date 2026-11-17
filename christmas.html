@@ -29,12 +29,28 @@
     opacity: 0; animation: rise 2s ease 2.6s forwards;
   }
   @keyframes rise { to { opacity: 1; transform: translateY(0); } }
+
+  .music {
+    position: fixed; right: max(18px, env(safe-area-inset-right)); bottom: max(18px, env(safe-area-inset-bottom));
+    width: 46px; height: 46px; border-radius: 50%; cursor: pointer;
+    border: 1px solid rgba(255, 225, 170, .28);
+    background: rgba(20, 26, 40, .55); backdrop-filter: blur(8px);
+    color: rgba(255, 232, 190, .82); font-size: 19px; line-height: 1;
+    font-family: Georgia, serif; display: flex; align-items: center; justify-content: center;
+    transition: all .3s ease; box-shadow: 0 6px 20px rgba(0,0,0,.35);
+  }
+  .music.playing {
+    color: #fff3d2; border-color: rgba(255, 214, 140, .75);
+    background: rgba(70, 52, 24, .6);
+    box-shadow: 0 0 24px rgba(255, 200, 120, .35), 0 6px 20px rgba(0,0,0,.35);
+  }
+  .music:active { transform: scale(.94); }
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
 <div class="word">MERRY CHRISTMAS</div>
-<div class="sub">轻触屏幕</div>
+<div class="sub">轻触屏幕 · 右下角可播放音乐</div>`n<button id="music" class="music" aria-label="播放音乐">♪</button>
 
 <script>
 (function () {
@@ -52,11 +68,14 @@
   var stars = [];      // 夜空星
   var snow = [];       // 雪
   var sparks = [];     // 点击迸发
+  var fgSnow = [];     // 近景虚化雪
+  var gifts = [];      // 礼物盒
 
   var treeCanvas = null;   // 烘焙好的树
   var bgCanvas = null;     // 烘焙好的背景
   var glowSprite = null;   // 通用光晕
   var ornSprites = {};     // 挂饰预渲染
+  var softSnow = null;     // 近景雪精灵
 
   var ORN_COLORS = [
     { h: 352, s: 78, l: 52 },   // 红
@@ -187,6 +206,21 @@
         a: rnd(0.18, 0.7)
       });
     }
+
+    // ---- 近景虚化雪 ----
+    fgSnow = [];
+    var fgn = Math.round(Math.min(26, Math.max(10, W / 34)));
+    for (var fg = 0; fg < fgn; fg++) {
+      fgSnow.push({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        r: rnd(16, 46),
+        vy: rnd(38, 90),
+        drift: rnd(-14, 14),
+        ph: rnd(0, Math.PI * 2),
+        a: rnd(0.05, 0.16)
+      });
+    }
   }
 
   function quad(a, c, b, t) {
@@ -295,7 +329,43 @@
     g.fillStyle = hg;
     g.fillRect(0, 0, W, H);
 
-    treeCanvas = c;
+    // ---------- 积雪地面 ----------
+    g.globalCompositeOperation = 'source-over';
+    var mounds = [
+      { x: geo.cx, y: geo.baseY + 10, rx: geo.maxR * 1.30, ry: geo.maxR * 0.20, a: 0.20 },
+      { x: geo.cx - geo.maxR * 0.24, y: geo.baseY + 6, rx: geo.maxR * 0.72, ry: geo.maxR * 0.13, a: 0.14 },
+      { x: geo.cx + geo.maxR * 0.30, y: geo.baseY + 8, rx: geo.maxR * 0.58, ry: geo.maxR * 0.11, a: 0.12 }
+    ];
+    mounds.forEach(function (m) {
+      var mg = g.createRadialGradient(m.x, m.y, 0, m.x, m.y, m.rx);
+      mg.addColorStop(0, 'rgba(226, 240, 255,' + m.a + ')');
+      mg.addColorStop(0.55, 'rgba(200, 222, 250,' + (m.a * 0.55) + ')');
+      mg.addColorStop(1, 'rgba(180, 205, 240, 0)');
+      g.fillStyle = mg;
+      g.beginPath();
+      g.ellipse(m.x, m.y, m.rx, m.ry, 0, 0, Math.PI * 2);
+      g.fill();
+    });
+
+    // 雪面高光
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    for (var hsp = 0; hsp < 90; hsp++) {
+      var hx = geo.cx + rnd(-geo.maxR * 1.15, geo.maxR * 1.15);
+      var hy = geo.baseY + rnd(-4, geo.maxR * 0.14);
+      g.globalAlpha = rnd(0.06, 0.20);
+      g.fillStyle = '#ffffff';
+      g.beginPath();
+      g.arc(hx, hy, rnd(0.4, 1.2), 0, Math.PI * 2);
+      g.fill();
+    }
+    g.restore();
+    g.globalAlpha = 1;
+
+    // ---------- 礼物盒 ----------
+    drawGifts(g);
+
+    treeCanvas = c;    treeCanvas = c;
   }
 
   function drawBranch(g, b) {
@@ -344,6 +414,102 @@
     }
   }
 
+  // ---------- 礼物盒 ----------
+  function drawGifts(g) {
+    var baseY = geo.baseY + geo.maxR * 0.06;
+    var spec = [
+      { dx: -0.62, w: 0.20, h: 0.15, hue: 352, sat: 68, lig: 44, rot: -0.05 },
+      { dx: 0.50, w: 0.17, h: 0.13, hue: 44, sat: 78, lig: 52, rot: 0.06 },
+      { dx: -0.22, w: 0.12, h: 0.10, hue: 156, sat: 45, lig: 38, rot: 0.03 },
+      { dx: 0.18, w: 0.14, h: 0.11, hue: 196, sat: 60, lig: 46, rot: -0.04 }
+    ];
+
+    spec.forEach(function (b) {
+      var w = geo.maxR * b.w;
+      var h = geo.maxR * b.h;
+      var x = geo.cx + geo.maxR * b.dx;
+      var y = baseY - h * 0.5;
+      var dp = h * 0.55;          // 顶面深度
+      var off = w * 0.30;         // 侧面宽度
+
+      // 地面投影
+      g.save();
+      g.globalAlpha = 0.35;
+      var sh = g.createRadialGradient(x, baseY + 2, 0, x, baseY + 2, w * 1.5);
+      sh.addColorStop(0, 'rgba(0,0,0,0.55)');
+      sh.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = sh;
+      g.beginPath();
+      g.ellipse(x, baseY + 2, w * 1.5, h * 0.34, 0, 0, Math.PI * 2);
+      g.fill();
+      g.restore();
+
+      g.save();
+      g.translate(x, y);
+      g.rotate(b.rot);
+
+      // 正面
+      var fg2 = g.createLinearGradient(-w / 2, 0, w / 2, 0);
+      fg2.addColorStop(0, 'hsl(' + b.hue + ',' + b.sat + '%,' + (b.lig - 14) + '%)');
+      fg2.addColorStop(0.45, 'hsl(' + b.hue + ',' + b.sat + '%,' + b.lig + '%)');
+      fg2.addColorStop(1, 'hsl(' + b.hue + ',' + b.sat + '%,' + (b.lig - 20) + '%)');
+      g.fillStyle = fg2;
+      g.beginPath();
+      g.moveTo(-w / 2, -h / 2 + dp * 0.5);
+      g.lineTo(w / 2, -h / 2 + dp * 0.5);
+      g.lineTo(w / 2, h / 2 + dp * 0.5);
+      g.lineTo(-w / 2, h / 2 + dp * 0.5);
+      g.closePath();
+      g.fill();
+
+      // 顶面
+      g.fillStyle = 'hsl(' + b.hue + ',' + (b.sat - 12) + '%,' + (b.lig + 12) + '%)';
+      g.beginPath();
+      g.moveTo(-w / 2, -h / 2 + dp * 0.5);
+      g.lineTo(w / 2, -h / 2 + dp * 0.5);
+      g.lineTo(w / 2 - off, -h / 2 - dp * 0.5);
+      g.lineTo(-w / 2 - off, -h / 2 - dp * 0.5);
+      g.closePath();
+      g.fill();
+
+      // 侧面
+      g.fillStyle = 'hsl(' + b.hue + ',' + (b.sat - 6) + '%,' + (b.lig - 24) + '%)';
+      g.beginPath();
+      g.moveTo(w / 2, -h / 2 + dp * 0.5);
+      g.lineTo(w / 2 - off, -h / 2 - dp * 0.5);
+      g.lineTo(w / 2 - off, h / 2 - dp * 0.5);
+      g.lineTo(w / 2, h / 2 + dp * 0.5);
+      g.closePath();
+      g.fill();
+
+      // 缎带（正面竖 + 顶面横）
+      g.fillStyle = 'hsla(44, 92%, 72%, 0.95)';
+      g.fillRect(-w * 0.07, -h / 2 + dp * 0.5, w * 0.14, h);
+      g.beginPath();
+      g.moveTo(-w / 2, -h * 0.06 + dp * 0.5);
+      g.lineTo(w / 2, -h * 0.06 + dp * 0.5);
+      g.lineTo(w / 2 - off, -h * 0.06 - dp * 0.5);
+      g.lineTo(-w / 2 - off, -h * 0.06 - dp * 0.5);
+      g.closePath();
+      g.fill();
+
+      // 蝴蝶结
+      var bw = w * 0.26, bh = h * 0.20;
+      g.fillStyle = 'hsla(44, 95%, 78%, 0.98)';
+      g.beginPath();
+      g.ellipse(-bw * 0.55, -h / 2 - dp * 0.15, bw * 0.55, bh * 0.75, -0.5, 0, Math.PI * 2);
+      g.fill();
+      g.beginPath();
+      g.ellipse(bw * 0.55, -h / 2 - dp * 0.15, bw * 0.55, bh * 0.75, 0.5, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = 'hsla(44, 95%, 62%, 1)';
+      g.beginPath();
+      g.arc(0, -h / 2 - dp * 0.15, bw * 0.26, 0, Math.PI * 2);
+      g.fill();
+
+      g.restore();
+    });
+  }
   // ---------- 烘焙：光晕精灵 ----------
   function bakeSprites() {
     var size = 96;
@@ -358,6 +524,20 @@
     g.fillStyle = rg;
     g.fillRect(0, 0, size, size);
     glowSprite = c;
+
+    // 近景虚化雪的软精灵
+    var ss = 128;
+    var sc = document.createElement('canvas');
+    sc.width = ss; sc.height = ss;
+    var sg2 = sc.getContext('2d');
+    var srg = sg2.createRadialGradient(ss/2, ss/2, 0, ss/2, ss/2, ss/2);
+    srg.addColorStop(0, 'rgba(255,255,255,0.95)');
+    srg.addColorStop(0.35, 'rgba(245,250,255,0.55)');
+    srg.addColorStop(0.62, 'rgba(235,244,255,0.20)');
+    srg.addColorStop(1, 'rgba(230,240,255,0)');
+    sg2.fillStyle = srg;
+    sg2.fillRect(0, 0, ss, ss);
+    softSnow = sc;
 
     ornSprites = {};
     ORN_COLORS.forEach(function (col, idx) {
@@ -582,6 +762,21 @@
     ctx.globalAlpha = 1;
   }
 
+  function drawFG(dt, t) {
+    if (!softSnow) return;
+    for (var i = 0; i < fgSnow.length; i++) {
+      var f = fgSnow[i];
+      f.y += f.vy * dt;
+      f.x += (f.drift + Math.sin(t * 0.55 + f.ph) * 12) * dt;
+      if (f.y - f.r > H + 30) { f.y = -f.r * 1.6; f.x = Math.random() * W; }
+      if (f.x < -f.r * 2) f.x = W + f.r;
+      if (f.x > W + f.r * 2) f.x = -f.r;
+
+      ctx.globalAlpha = f.a * (0.7 + 0.3 * Math.sin(t * 1.4 + f.ph));
+      ctx.drawImage(softSnow, f.x - f.r, f.y - f.r, f.r * 2, f.r * 2);
+    }
+    ctx.globalAlpha = 1;
+  }
   // ---------- 交互 ----------
   function burst(px, py) {
     for (var i = 0; i < 24; i++) {
@@ -600,6 +795,94 @@
   }
 
   canvas.addEventListener('pointerdown', function (e) { burst(e.clientX, e.clientY); });
+
+  // ---------- 音乐（点击才播） ----------
+  var A = { ctx: null, master: null, on: false, nextTime: 0, idx: 0, timer: null };
+  var BEAT = 0.46;
+
+  // 铃儿响叮当（C 大调，简化为音乐盒式单音）
+  var MELODY = [
+    [64,1],[64,1],[64,1],[64,1],[64,1],[64,1],
+    [64,1],[67,1],[60,1],[62,1],[64,3],
+    [65,1],[65,1],[65,1],[65,1],[65,1],[64,1],[64,1],[64,1],
+    [64,1],[62,1],[62,1],[64,1],[62,1],[67,3],
+    [64,1],[64,1],[64,1],[64,1],[64,1],[64,1],
+    [64,1],[67,1],[60,1],[62,1],[64,3],
+    [65,1],[65,1],[65,1],[65,1],[65,1],[64,1],[64,1],[64,1],
+    [67,1],[67,1],[65,1],[62,1],[60,4]
+  ];
+
+  function midi2freq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+
+  function bell(freq, when, dur) {
+    var c = A.ctx;
+    var g = c.createGain();
+    g.gain.setValueAtTime(0.0001, when);
+    g.gain.exponentialRampToValueAtTime(0.20, when + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + Math.max(0.5, dur * 1.9));
+    g.connect(A.master);
+
+    var o1 = c.createOscillator();
+    o1.type = 'sine';
+    o1.frequency.value = freq;
+    o1.connect(g);
+
+    var g2 = c.createGain();
+    g2.gain.setValueAtTime(0.0001, when);
+    g2.gain.exponentialRampToValueAtTime(0.055, when + 0.01);
+    g2.gain.exponentialRampToValueAtTime(0.0001, when + Math.max(0.35, dur * 1.2));
+    g2.connect(A.master);
+
+    var o2 = c.createOscillator();
+    o2.type = 'sine';
+    o2.frequency.value = freq * 2.006;
+    o2.connect(g2);
+
+    o1.start(when); o2.start(when);
+    o1.stop(when + dur * 2 + 0.4);
+    o2.stop(when + dur * 2 + 0.4);
+  }
+
+  function schedule() {
+    if (!A.on) return;
+    var c = A.ctx;
+    while (A.nextTime < c.currentTime + 0.3) {
+      var n = MELODY[A.idx % MELODY.length];
+      bell(midi2freq(n[0]), A.nextTime, n[1] * BEAT);
+      if (A.idx % 8 === 0) bell(midi2freq(A.idx % 16 === 0 ? 48 : 43), A.nextTime, 1.6);
+      A.nextTime += n[1] * BEAT;
+      A.idx++;
+      if (A.idx % MELODY.length === 0) A.nextTime += BEAT * 2.2;
+    }
+  }
+
+  var musicBtn = document.getElementById('music');
+  musicBtn.addEventListener('click', function (ev) {
+    ev.stopPropagation();
+    if (!A.ctx) {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      A.ctx = new AC();
+      A.master = A.ctx.createGain();
+      A.master.gain.value = 0.32;
+      A.master.connect(A.ctx.destination);
+    }
+    if (A.ctx.state === 'suspended') A.ctx.resume();
+
+    A.on = !A.on;
+    musicBtn.classList.toggle('playing', A.on);
+    musicBtn.textContent = A.on ? '❙❙' : '♪';
+    musicBtn.style.fontSize = A.on ? '15px' : '19px';
+
+    if (A.on) {
+      A.nextTime = A.ctx.currentTime + 0.15;
+      A.idx = 0;
+      if (!A.timer) A.timer = setInterval(schedule, 60);
+      schedule();
+    }
+  });
+  musicBtn.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
+
 
   // ---------- 主循环 ----------
   var last = performance.now(), t0 = last;
@@ -624,6 +907,7 @@
     ctx.restore();
 
     drawSnow(dt, t);
+    drawFG(dt, t);
     drawSparks(dt);
   }
 
