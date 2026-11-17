@@ -113,13 +113,14 @@
   // ---------- 生成结构 ----------
   function build() {
     branches = [];
-    var LEVELS = 46;
+    var LEVELS = 54;
     for (var li = 0; li < LEVELS; li++) {
       var k = li / (LEVELS - 1);              // 0 顶 → 1 底
       var y = geo.topY + geo.h * k;
+      if (k > 0.905) continue;
       var R = geo.maxR * Math.pow(k, 1.06);
       if (R < 2) continue;
-      var n = Math.round(6 + 10 * k);          // 底部枝更多
+      var n = Math.round(7 + 11 * k);          // 底部枝更多
       for (var b = 0; b < n; b++) {
         var side = (b % 2 === 0) ? -1 : 1;
         var spread = R * rnd(0.55, 1.06);
@@ -282,6 +283,28 @@
     g.fillStyle = tg;
     g.fill();
 
+    // 内芯：不透明的暗色锥体，防止枝桠缝隙透出天空
+    (function () {
+      var steps2 = 44;
+      for (var kk = 0; kk <= 1.0001; kk += 1 / steps2) {
+        var yy = geo.topY + geo.h * kk;
+        var rx = geo.maxR * Math.pow(kk, 1.06) * 0.985;
+        var ry = Math.max(0.8, rx * 0.15);
+        g.fillStyle = 'hsla(152, 34%, ' + (7 + 5 * kk).toFixed(1) + '%, ' + (0.88 + 0.09 * kk) + ')';
+        g.beginPath();
+        g.ellipse(geo.cx, yy, rx, ry, 0, 0, Math.PI * 2);
+        g.fill();
+      }
+      // 中心的深阴影，做出圆柱受光的暗部
+      var ig = g.createRadialGradient(geo.cx, geo.topY + geo.h * 0.62, 0, geo.cx, geo.topY + geo.h * 0.62, geo.maxR * 0.75);
+      ig.addColorStop(0, 'rgba(0,0,0,0.28)');
+      ig.addColorStop(0.62, 'rgba(0,0,0,0.10)');
+      ig.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = ig;
+      g.beginPath();
+      g.ellipse(geo.cx, geo.topY + geo.h * 0.62, geo.maxR * 0.9, geo.h * 0.42, 0, 0, Math.PI * 2);
+      g.fill();
+    })();
     // 枝桠 + 针叶
     g.lineCap = 'round';
     for (var i = 0; i < branches.length; i++) {
@@ -347,7 +370,6 @@
       g.fill();
     });
 
-    // 雪面高光
     g.save();
     g.globalCompositeOperation = 'lighter';
     for (var hsp = 0; hsp < 90; hsp++) {
@@ -362,10 +384,68 @@
     g.restore();
     g.globalAlpha = 1;
 
+    // ---------- 可见树干 ----------
+    drawFrontTrunk(g);
+
     // ---------- 礼物盒 ----------
     drawGifts(g);
 
-    treeCanvas = c;    treeCanvas = c;
+    treeCanvas = c;
+  }
+
+  // ---------- 可见的下半段树干 ----------
+  function drawFrontTrunk(g) {
+    var topY = geo.topY + geo.h * 0.845;
+    var botY = geo.baseY + geo.maxR * 0.040;
+    var wT = geo.maxR * 0.040;
+    var wB = geo.maxR * 0.062;
+
+    g.save();
+    g.beginPath();
+    g.moveTo(geo.cx - wT, topY);
+    g.quadraticCurveTo(geo.cx - wT * 2.2, (topY + botY) * 0.5, geo.cx - wB, botY - geo.maxR * 0.02);
+    g.quadraticCurveTo(geo.cx - wB * 1.6, botY + geo.maxR * 0.012, geo.cx - wB * 2.0, botY + geo.maxR * 0.018);
+    g.lineTo(geo.cx + wB * 2.0, botY + geo.maxR * 0.018);
+    g.quadraticCurveTo(geo.cx + wB * 1.6, botY + geo.maxR * 0.012, geo.cx + wB, botY - geo.maxR * 0.02);
+    g.quadraticCurveTo(geo.cx + wT * 2.2, (topY + botY) * 0.5, geo.cx + wT, topY);
+    g.closePath();
+
+    var grd = g.createLinearGradient(geo.cx - wB, 0, geo.cx + wB, 0);
+    grd.addColorStop(0, '#1c1209');
+    grd.addColorStop(0.2, '#63421f');
+    grd.addColorStop(0.42, '#7a5228');
+    grd.addColorStop(0.66, '#4d3419');
+    grd.addColorStop(1, '#160d06');
+    g.fillStyle = grd;
+    g.fill();
+
+    g.save();
+    g.clip();
+    for (var i = 0; i < 16; i++) {
+      var xx = geo.cx + rnd(-wB * 0.95, wB * 0.95);
+      g.strokeStyle = 'rgba(10,6,2,' + rnd(0.2, 0.5) + ')';
+      g.lineWidth = rnd(0.5, 1.7);
+      g.beginPath();
+      g.moveTo(xx, topY + rnd(0, geo.h * 0.06));
+      g.quadraticCurveTo(xx + rnd(-5, 5), (topY + botY) * 0.5, xx + rnd(-7, 7), botY + 4);
+      g.stroke();
+    }
+    // 顶部与枝叶衔接：压一层暗绿，避免切口
+    g.save();
+    g.globalCompositeOperation = 'source-over';
+    var blend = g.createLinearGradient(0, topY - 6, 0, topY + geo.maxR * 0.10);
+    blend.addColorStop(0, 'hsla(150, 34%, 7%, 0.95)');
+    blend.addColorStop(1, 'hsla(150, 34%, 7%, 0)');
+    g.fillStyle = blend;
+    g.fillRect(geo.cx - geo.maxR * 0.5, topY - 8, geo.maxR, geo.maxR * 0.12);
+    g.restore();
+    var rim = g.createLinearGradient(geo.cx + wB * 0.05, 0, geo.cx + wB * 1.15, 0);
+    rim.addColorStop(0, 'rgba(255,196,120,0)');
+    rim.addColorStop(1, 'rgba(255,196,120,0.26)');
+    g.fillStyle = rim;
+    g.fillRect(geo.cx - wB * 2, topY - 10, wB * 4, botY - topY + 30);
+    g.restore();
+    g.restore();
   }
 
   function drawBranch(g, b) {
@@ -418,10 +498,10 @@
   function drawGifts(g) {
     var baseY = geo.baseY + geo.maxR * 0.06;
     var spec = [
-      { dx: -0.62, w: 0.20, h: 0.15, hue: 352, sat: 68, lig: 44, rot: -0.05 },
-      { dx: 0.50, w: 0.17, h: 0.13, hue: 44, sat: 78, lig: 52, rot: 0.06 },
-      { dx: -0.22, w: 0.12, h: 0.10, hue: 156, sat: 45, lig: 38, rot: 0.03 },
-      { dx: 0.18, w: 0.14, h: 0.11, hue: 196, sat: 60, lig: 46, rot: -0.04 }
+      { dx: -0.74, w: 0.20, h: 0.15, hue: 352, sat: 68, lig: 44, rot: -0.05 },
+      { dx: 0.62, w: 0.17, h: 0.13, hue: 44, sat: 78, lig: 52, rot: 0.06 },
+      { dx: -0.40, w: 0.12, h: 0.10, hue: 156, sat: 45, lig: 38, rot: 0.03 },
+      { dx: 0.34, w: 0.14, h: 0.11, hue: 196, sat: 60, lig: 46, rot: -0.04 }
     ];
 
     spec.forEach(function (b) {
