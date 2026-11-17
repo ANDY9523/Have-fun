@@ -108,6 +108,22 @@
   .hist .h-del { border: none; background: transparent; color: #5b6a7e; font-size: 17px; cursor: pointer; padding: 2px 4px; }
 
   .empty-tip { text-align: center; color: #5f6f83; font-size: 12.5px; padding: 18px 0; }
+  .sec-title button.mini {
+    border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.06); color: #cfe0f5;
+    border-radius: 8px; padding: 5px 9px; font-size: 11px; font-family: inherit; cursor: pointer;
+  }
+  .import { margin: 0 0 10px; padding: 10px; border-radius: 12px; border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.03); }
+  .import textarea {
+    width: 100%; min-height: 96px; background: #0f151d; border: 1px solid rgba(255,255,255,.09); border-radius: 9px;
+    color: #dfe9f5; font-size: 12px; padding: 9px; font-family: ui-monospace, Consolas, monospace; resize: vertical; outline: none;
+  }
+  .import .row { display: flex; gap: 8px; margin-top: 8px; }
+  .import button {
+    flex: 1; border-radius: 9px; padding: 9px; font-size: 12.5px; font-family: inherit; cursor: pointer;
+    border: 1px solid rgba(255,255,255,.13); background: rgba(255,255,255,.06); color: #e2ebf5;
+  }
+  .import button.ok { background: linear-gradient(180deg, #4da3ff, #2f7fe0); border: none; color: #fff; font-weight: 700; }
+
   footer { text-align: center; font-size: 11px; color: #566476; line-height: 1.7; margin-top: 18px; }
 </style>
 </head>
@@ -129,7 +145,14 @@
   <section>
     <div class="sec-title">
       <h2>填你看到的价格</h2>
-      <span class="tip">优惠＝券＋满减，一起填</span>
+      <button class="mini" id="importBtn">粘贴机器人结果</button>
+    </div>
+    <div class="import" id="importPanel" style="display:none">
+      <textarea id="importText" placeholder="把安卓比价机器人复制出来的 JSON 粘到这里（脚本在仓库 pricebot.js）"></textarea>
+      <div class="row">
+        <button id="importCancel">取消</button>
+        <button class="ok" id="importDo">解析并填入</button>
+      </div>
     </div>
     <div class="rows" id="rows"></div>
   </section>
@@ -497,6 +520,57 @@
     copyText(lines.join('\n')).then(function (ok) {
       toast(ok ? '结论已复制' : '复制失败，手动截个图吧');
     });
+  });
+
+  // ---------- 导入机器人结果 ----------
+  var importBtn = document.getElementById('importBtn');
+  var importPanel = document.getElementById('importPanel');
+  var importText = document.getElementById('importText');
+
+  importBtn.addEventListener('click', function () {
+    var open = importPanel.style.display !== 'none';
+    importPanel.style.display = open ? 'none' : '';
+    if (!open) importText.focus();
+  });
+  document.getElementById('importCancel').addEventListener('click', function () {
+    importPanel.style.display = 'none';
+  });
+
+  var NAME2ID = { '淘宝': 'taobao', '天猫': 'taobao', '京东': 'jd', '拼多多': 'pdd', '得物': 'dewu' };
+
+  document.getElementById('importDo').addEventListener('click', function () {
+    var raw = (importText.value || '').trim();
+    if (!raw) { toast('先粘贴 JSON'); return; }
+    var obj;
+    try { obj = JSON.parse(raw); } catch (e) { toast('JSON 格式不对'); return; }
+
+    var data = obj.data || obj;
+    if (typeof data !== 'object' || !data) { toast('没找到 data 字段'); return; }
+
+    var filled = 0, summary = [];
+    Object.keys(data).forEach(function (name) {
+      var pid = NAME2ID[name] || NAME2ID[name.replace(/\s/g, '')];
+      if (!pid) return;
+      var list = data[name];
+      if (!Array.isArray(list) || !list.length) return;
+      var min = null;
+      list.forEach(function (it) {
+        var p = Number(it && it.price);
+        if (isFinite(p) && p > 0 && (min === null || p < min)) min = p;
+      });
+      if (min === null) return;
+      var o = getOffer(pid);
+      o.price = String(min);
+      filled++;
+      summary.push(name + ' ¥' + min);
+    });
+
+    if (!filled) { toast('没识别到可用的平台数据'); return; }
+    save();
+    renderRows();
+    importPanel.style.display = 'none';
+    importText.value = '';
+    toast('已填入 ' + filled + ' 个平台：' + summary.join(' / '));
   });
 
   // ---------- 初始化 ----------
