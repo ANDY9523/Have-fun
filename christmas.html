@@ -119,7 +119,7 @@
       var yTop = geo.topY + geo.h * u0 * 0.96;
       var yBot = geo.topY + geo.h * u1 * 0.96;
       var rBot = geo.maxR * Math.pow(u1, 1.08);
-      var rTop = ti === 0 ? geo.maxR * 0.015 : geo.maxR * Math.pow(u0, 1.08) * 0.34;
+      var rTop = ti === 0 ? geo.maxR * 0.015 : geo.maxR * Math.pow(u0, 1.08) * 0.40;
 
       var count = Math.round(80 + 55 * ti);      // 下层更密
 
@@ -133,7 +133,7 @@
         var x0 = geo.cx + rnd(-R * 0.06, R * 0.06);
         var y0 = y + rnd(-3, 3);
         var x1 = geo.cx + side * spread;
-        var y1 = y0 + spread * rnd(0.06, 0.18);          // 下垂
+        var y1 = y0 + spread * rnd(0.05, 0.14);          // 下垂
         var cxp = x0 + side * spread * 0.55;
         var cyp = Math.min(y0, y1) - spread * rnd(0.02, 0.08);
 
@@ -322,24 +322,22 @@
     g.lineCap = 'round';
     for (var i = 0; i < branches.length; i++) drawBranch(g, branches[i]);
 
-    // 层间阴影：柔和的椭圆暗部，边缘自然淡出（不用直角色带）
+    // 层间的横向阴影：五层分界的来源
     g.save();
     for (var t2 = 1; t2 < TIERS; t2++) {
       var uu = t2 / TIERS;
       var yLine = geo.topY + geo.h * uu * 0.96;
-      var rLine = geo.maxR * Math.pow(uu, 1.08) * 0.98;
-      g.save();
-      g.translate(geo.cx, yLine);
-      g.scale(1, 0.11);
-      var rg2 = g.createRadialGradient(0, 0, 0, 0, 0, rLine);
-      rg2.addColorStop(0, 'rgba(0,0,0,0.26)');
-      rg2.addColorStop(0.62, 'rgba(0,0,0,0.10)');
-      rg2.addColorStop(1, 'rgba(0,0,0,0)');
-      g.fillStyle = rg2;
-      g.beginPath(); g.arc(0, 0, rLine, 0, Math.PI * 2); g.fill();
-      g.restore();
+      var rLine = geo.maxR * Math.pow(uu, 1.08);
+      var bandH = geo.h * 0.045;
+      var lg = g.createLinearGradient(0, yLine - bandH * 1.2, 0, yLine + bandH * 0.5);
+      lg.addColorStop(0, 'rgba(0,0,0,0)');
+      lg.addColorStop(0.55, 'rgba(0,0,0,0.46)');
+      lg.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = lg;
+      g.fillRect(geo.cx - rLine, yLine - bandH, rLine * 2, bandH * 1.8);
     }
     g.restore();
+
     // 整体明暗
     g.globalCompositeOperation = 'source-atop';
     var sg = g.createLinearGradient(geo.cx - geo.maxR, 0, geo.cx + geo.maxR, 0);
@@ -425,8 +423,8 @@
 
   function drawGround(g) {
     var mounds = [
-      { x: geo.cx, y: geo.baseY + 12, rx: geo.maxR * 2.30, ry: geo.maxR * 0.34, a: 0.06 },
-      { x: geo.cx, y: geo.baseY + 6, rx: geo.maxR * 1.30, ry: geo.maxR * 0.18, a: 0.05 }
+      { x: geo.cx, y: geo.baseY + 10, rx: geo.maxR * 1.28, ry: geo.maxR * 0.17, a: 0.20 },
+      { x: geo.cx - geo.maxR * 0.26, y: geo.baseY + 6, rx: geo.maxR * 0.66, ry: geo.maxR * 0.11, a: 0.14 }
     ];
     mounds.forEach(function (m) {
       var mg = g.createRadialGradient(m.x, m.y, 0, m.x, m.y, m.rx);
@@ -439,11 +437,12 @@
   }
 
   function drawGifts(g) {
-    var baseY = geo.baseY + geo.maxR * 0.10;
+    var baseY = geo.baseY + geo.maxR * 0.06;
     var spec = [
-      { dx: -0.66, w: 0.19, h: 0.14, hue: 352, sat: 62, lig: 40 },
-      { dx: 0.52, w: 0.16, h: 0.12, hue: 44, sat: 68, lig: 47 },
-      { dx: -0.06, w: 0.13, h: 0.10, hue: 196, sat: 52, lig: 40 }
+      { dx: -0.72, w: 0.24, h: 0.18, hue: 352, sat: 66, lig: 42 },
+      { dx: 0.62, w: 0.20, h: 0.15, hue: 44, sat: 74, lig: 50 },
+      { dx: -0.36, w: 0.15, h: 0.12, hue: 156, sat: 42, lig: 36 },
+      { dx: 0.32, w: 0.17, h: 0.13, hue: 196, sat: 58, lig: 44 }
     ];
     spec.forEach(function (b) {
       var w = geo.maxR * b.w, h = geo.maxR * b.h;
