@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0d1117">
+<title>比价助手 · 输入商品名，算到手价</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; min-height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    background: radial-gradient(1000px 600px at 50% -10%, #17202b 0%, #0e131a 55%, #080b10 100%);
+    color: #eaf0f7; padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 14px 14px 40px; }
+
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+  h1 { margin: 0; font-size: 19px; font-weight: 800; letter-spacing: .5px; }
+  header .sub { font-size: 11.5px; color: #7d8b9c; }
+
+  .search { display: flex; gap: 8px; margin-bottom: 12px; }
+  .search input {
+    flex: 1 1 auto; min-width: 0; background: #131a24; border: 1px solid rgba(255,255,255,.1);
+    border-radius: 12px; padding: 13px 14px; color: #eaf0f7; font-size: 15px; font-family: inherit; outline: none;
+  }
+  .search input:focus { border-color: rgba(90,169,255,.6); }
+  .search button {
+    flex: 0 0 auto; border: none; border-radius: 12px; padding: 0 18px; font-size: 14.5px; font-weight: 700;
+    background: linear-gradient(180deg, #4da3ff, #2f7fe0); color: #fff; font-family: inherit; cursor: pointer;
+  }
+  .search button:active { transform: scale(.97); }
+
+  .platforms { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 14px; }
+  .pf {
+    display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-radius: 13px;
+    border: 1px solid rgba(255,255,255,.09); background: rgba(255,255,255,.035); cursor: pointer; text-align: left;
+    color: inherit; font-family: inherit;
+  }
+  .pf:active { transform: scale(.98); }
+  .pf .dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
+  .pf .txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .pf .nm { font-size: 14px; font-weight: 700; }
+  .pf .hint { font-size: 10.5px; color: #7d8b9c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  section { margin-bottom: 14px; }
+  .sec-title { display: flex; align-items: center; justify-content: space-between; margin: 0 2px 8px; }
+  .sec-title h2 { margin: 0; font-size: 13px; font-weight: 700; color: #9db0c6; letter-spacing: .5px; }
+  .sec-title .tip { font-size: 10.5px; color: #66778c; }
+
+  .rows { display: flex; flex-direction: column; gap: 8px; }
+  .row {
+    border: 1px solid rgba(255,255,255,.08); border-radius: 14px; background: rgba(255,255,255,.03);
+    padding: 11px 12px; transition: border-color .18s, background .18s;
+  }
+  .row.best { border-color: rgba(61,214,140,.55); background: rgba(61,214,140,.07); }
+  .row-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .row-head .dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+  .row-head .nm { font-size: 14px; font-weight: 700; }
+  .row-head .badge {
+    font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px;
+    background: rgba(61,214,140,.16); color: #5fe0a0; border: 1px solid rgba(61,214,140,.35);
+  }
+  .row-head .total { margin-left: auto; font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .row-head .total small { font-size: 10.5px; font-weight: 600; color: #7d8b9c; margin-right: 2px; }
+
+  .inputs { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 7px; }
+  .field { display: flex; flex-direction: column; gap: 3px; }
+  .field label { font-size: 10.5px; color: #7d8b9c; padding-left: 2px; }
+  .field input {
+    width: 100%; background: #0f151d; border: 1px solid rgba(255,255,255,.09); border-radius: 9px;
+    padding: 8px 9px; color: #eaf0f7; font-size: 14.5px; font-family: inherit; outline: none;
+    font-variant-numeric: tabular-nums;
+  }
+  .field input:focus { border-color: rgba(90,169,255,.55); }
+  .field input::placeholder { color: #46556a; }
+
+  .result {
+    border-radius: 16px; padding: 16px; border: 1px solid rgba(90,169,255,.25);
+    background: linear-gradient(180deg, rgba(77,163,255,.12), rgba(255,255,255,.02));
+  }
+  .result.empty { border-color: rgba(255,255,255,.08); background: rgba(255,255,255,.03); }
+  .result .big { font-size: 13px; color: #a9bdd4; margin-bottom: 6px; }
+  .result .win { font-size: 26px; font-weight: 900; letter-spacing: .5px; font-variant-numeric: tabular-nums; }
+  .result .win span { font-size: 15px; font-weight: 700; color: #cfe2f7; margin-left: 6px; }
+  .result .diff { margin-top: 6px; font-size: 13px; color: #9db0c6; line-height: 1.6; }
+  .result .advice { margin-top: 10px; padding-top: 10px; border-top: 1px dashed rgba(255,255,255,.12); font-size: 12.5px; color: #b8c8dc; line-height: 1.7; }
+  .result .advice b { color: #ffd479; }
+
+  .actions { display: flex; gap: 8px; margin-top: 12px; }
+  .actions button {
+    flex: 1; border: 1px solid rgba(255,255,255,.13); background: rgba(255,255,255,.06); color: #e2ebf5;
+    border-radius: 11px; padding: 11px; font-size: 13.5px; font-weight: 650; font-family: inherit; cursor: pointer;
+  }
+  .actions button.primary { background: linear-gradient(180deg, #3dd68c, #24a86a); border: none; color: #04180f; }
+  .actions button:active { transform: scale(.98); }
+
+  .history { display: flex; flex-direction: column; gap: 7px; }
+  .hist {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px;
+    background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.07);
+  }
+  .hist .h-main { flex: 1 1 auto; min-width: 0; }
+  .hist .h-kw { font-size: 13.5px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hist .h-sub { font-size: 11px; color: #7d8b9c; margin-top: 2px; }
+  .hist .h-price { font-size: 14.5px; font-weight: 800; color: #5fe0a0; font-variant-numeric: tabular-nums; }
+  .hist .h-del { border: none; background: transparent; color: #5b6a7e; font-size: 17px; cursor: pointer; padding: 2px 4px; }
+
+  .empty-tip { text-align: center; color: #5f6f83; font-size: 12.5px; padding: 18px 0; }
+  footer { text-align: center; font-size: 11px; color: #566476; line-height: 1.7; margin-top: 18px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>比价助手</h1>
+    <div class="sub">输入名字 → 开四个 App → 填价格 → 算到手价</div>
+  </header>
+
+  <div class="search">
+    <input id="kw" type="search" placeholder="想买什么？比如 罗技 G304 无线鼠标" autocomplete="off">
+    <button id="go">生成</button>
+  </div>
+
+  <div class="platforms" id="platforms"></div>
+
+  <section>
+    <div class="sec-title">
+      <h2>填你看到的价格</h2>
+      <span class="tip">优惠＝券＋满减，一起填</span>
+    </div>
+    <div class="rows" id="rows"></div>
+  </section>
+
+  <section>
+    <div class="result empty" id="result">
+      <div class="big">还没填价格</div>
+      <div class="win">先在上面填几个到手价</div>
+      <div class="diff">填得越多，结论越准。</div>
+    </div>
+    <div class="actions">
+      <button id="copyBtn">复制结论</button>
+      <button class="primary" id="saveBtn">存进比价记录</button>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-title">
+      <h2>比价记录</h2>
+      <span class="tip" id="histCount"></span>
+    </div>
+    <div class="history" id="history"></div>
+  </section>
+
+  <footer>价格以你看到的为准 · 到手价 = 售价 − 优惠 + 运费 · 数据只存在这台手机</footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var PLATFORMS = [
+    { id: 'taobao', name: '淘宝', hint: '券多，注意店铺', color: '#ff6a3d',
+      search: function (kw) { return 'https://s.taobao.com/search?q=' + encodeURIComponent(kw); } },
+    { id: 'jd', name: '京东', hint: '自营快，常有免息', color: '#e93b3d',
+      search: function (kw) { return 'https://so.m.jd.com/ware/search.action?keyword=' + encodeURIComponent(kw); } },
+    { id: 'pdd', name: '拼多多', hint: '百亿补贴常最低', color: '#e02e24',
+      search: function (kw) { return 'https://mobile.yangkeduo.com/search_result.html?search_key=' + encodeURIComponent(kw); } },
+    { id: 'dewu', name: '得物', hint: '有鉴别，价格含服务', color: '#00c2a8',
+      search: function (kw) { return 'https://m.dewu.com/router/search?keyword=' + encodeURIComponent(kw); } }
+  ];
+
+  var LS_KEY = 'pricecompare.v1';
+  var state = {
+    kw: '',
+    offers: {},
+    history: []
+  };
+
+  var kwEl = document.getElementById('kw');
+  var goBtn = document.getElementById('go');
+  var platformsEl = document.getElementById('platforms');
+  var rowsEl = document.getElementById('rows');
+  var resultEl = document.getElementById('result');
+  var historyEl = document.getElementById('history');
+  var histCountEl = document.getElementById('histCount');
+
+  // ---------- 存储 ----------
+  function load() {
+    try {
+      var raw = localStorage.getItem(LS_KEY);
+      if (!raw) return { kw: '', offers: {}, history: [] };
+      var d = JSON.parse(raw);
+      return {
+        kw: d.kw || '',
+        offers: d.offers || {},
+        history: Array.isArray(d.history) ? d.history : []
+      };
+    } catch (e) { return { kw: '', offers: {}, history: [] }; }
+  }
+  function save() {
+    try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {}
+  }
+
+  // ---------- 平台卡片 ----------
+  function renderPlatforms() {
+    platformsEl.innerHTML = '';
+    PLATFORMS.forEach(function (p) {
+      var b = document.createElement('button');
+      b.className = 'pf';
+      b.type = 'button';
+      b.innerHTML = '<span class="dot" style="background:' + p.color + '"></span>' +
+        '<span class="txt"><span class="nm">' + p.name + '</span><span class="hint">' + p.hint + '</span></span>';
+      b.addEventListener('click', function () { openPlatform(p); });
+      platformsEl.appendChild(b);
+    });
+  }
+
+  function toast(msg) {
+    var t = document.createElement('div');
+    t.textContent = msg;
+    t.style.cssText = 'position:fixed;left:50%;bottom:36px;transform:translateX(-50%);background:rgba(20,28,38,.96);' +
+      'color:#eaf0f7;padding:10px 18px;border-radius:999px;font-size:13px;z-index:99;border:1px solid rgba(255,255,255,.14);' +
+      'box-shadow:0 8px 24px rgba(0,0,0,.4);transition:opacity .3s';
+    document.body.appendChild(t);
+    setTimeout(function () { t.style.opacity = '0'; }, 1400);
+    setTimeout(function () { t.remove(); }, 1800);
+  }
+
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).then(function () { return true; }).catch(function () { return false; });
+    }
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      var ok = document.execCommand('copy');
+      ta.remove();
+      return Promise.resolve(ok);
+    } catch (e) { return Promise.resolve(false); }
+  }
+
+  function openPlatform(p) {
+    var kw = (kwEl.value || '').trim();
+    if (!kw) { kwEl.focus(); toast('先输入想买的东西'); return; }
+    var url = p.search(kw);
+    var w = window.open(url, '_blank');
+    if (!w) { location.href = url; }
+    copyText(kw).then(function (ok) {
+      toast(ok ? '已复制「' + kw + '」，没跳过去就到 ' + p.name + ' 里粘贴' : '关键词：' + kw);
+    });
+  }
+
+  // ---------- 比价表 ----------
+  function getOffer(id) {
+    if (!state.offers[id]) state.offers[id] = { price: '', coupon: '', shipping: '', note: '' };
+    return state.offers[id];
+  }
+
+  function toNum(v) {
+    var n = parseFloat(String(v).replace(/[^\d.]/g, ''));
+    return isFinite(n) ? n : 0;
+  }
+
+  function totalOf(o) {
+    var price = toNum(o.price);
+    if (!price) return null;
+    var coupon = toNum(o.coupon);
+    var ship = toNum(o.shipping);
+    return Math.max(0, price - coupon + ship);
+  }
+
+  function renderRows() {
+    rowsEl.innerHTML = '';
+    PLATFORMS.forEach(function (p) {
+      var o = getOffer(p.id);
+      var row = document.createElement('div');
+      row.className = 'row';
+      row.dataset.pid = p.id;
+
+      var head = document.createElement('div');
+      head.className = 'row-head';
+      head.innerHTML = '<span class="dot" style="background:' + p.color + '"></span><span class="nm">' + p.name + '</span>' +
+        '<span class="badge" style="display:none">最低</span><span class="total"><small>到手</small>—</span>';
+      row.appendChild(head);
+
+      var inputs = document.createElement('div');
+      inputs.className = 'inputs';
+      [['price', '售价'], ['coupon', '优惠'], ['shipping', '运费']].forEach(function (f) {
+        var wrap = document.createElement('div');
+        wrap.className = 'field';
+        var lab = document.createElement('label');
+        lab.textContent = f[1];
+        var inp = document.createElement('input');
+        inp.type = 'number';
+        inp.inputMode = 'decimal';
+        inp.step = '0.01';
+        inp.min = '0';
+        inp.placeholder = f[0] === 'shipping' ? '0' : '0';
+        inp.value = o[f[0]] === '' ? '' : o[f[0]];
+        inp.addEventListener('input', function () {
+          o[f[0]] = inp.value;
+          save();
+          recalc();
+        });
+        wrap.appendChild(lab);
+        wrap.appendChild(inp);
+        inputs.appendChild(wrap);
+      });
+      row.appendChild(inputs);
+      rowsEl.appendChild(row);
+    });
+    recalc();
+  }
+
+  function recalc() {
+    var totals = [];
+    PLATFORMS.forEach(function (p) {
+      var o = getOffer(p.id);
+      var t = totalOf(o);
+      var row = rowsEl.querySelector('.row[data-pid="' + p.id + '"]');
+      if (!row) return;
+      var totalEl = row.querySelector('.total');
+      if (t === null) {
+        totalEl.innerHTML = '<small>到手</small>—';
+      } else {
+        totalEl.innerHTML = '<small>到手</small>¥' + t.toFixed(2);
+        totals.push({ p: p, t: t, o: o });
+      }
+    });
+
+    rowsEl.querySelectorAll('.row').forEach(function (r) { r.classList.remove('best'); });
+    rowsEl.querySelectorAll('.badge').forEach(function (b) { b.style.display = 'none'; });
+
+    if (!totals.length) {
+      resultEl.className = 'result empty';
+      resultEl.innerHTML = '<div class="big">还没填价格</div><div class="win">先在上面填几个到手价</div>' +
+        '<div class="diff">填得越多，结论越准。</div>';
+      return;
+    }
+
+    totals.sort(function (a, b) { return a.t - b.t; });
+    var best = totals[0];
+    var second = totals[1];
+
+    var row = rowsEl.querySelector('.row[data-pid="' + best.p.id + '"]');
+    if (row) {
+      row.classList.add('best');
+      var badge = row.querySelector('.badge');
+      if (badge) badge.style.display = '';
+    }
+
+    var diffText;
+    if (second) {
+      diffText = '比第二名「' + second.p.name + '」便宜 ¥' + (second.t - best.t).toFixed(2) +
+        '（它 ¥' + second.t.toFixed(2) + '）';
+      if (totals.length > 2) {
+        diffText += '，比最贵的便宜 ¥' + (totals[totals.length - 1].t - best.t).toFixed(2);
+      }
+    } else {
+      diffText = '只有一家填了价格，多填几家才能比。';
+    }
+
+    var advice = buildAdvice(best, totals);
+    resultEl.className = 'result';
+    resultEl.innerHTML =
+      '<div class="big">当前最低到手价</div>' +
+      '<div class="win">¥' + best.t.toFixed(2) + '<span>' + best.p.name + '</span></div>' +
+      '<div class="diff">' + diffText + '</div>' +
+      '<div class="advice">' + advice + '</div>';
+  }
+
+  function buildAdvice(best, totals) {
+    var lines = [];
+    var o = best.o;
+    var price = toNum(o.price), coupon = toNum(o.coupon), ship = toNum(o.shipping);
+
+    if (coupon > 0) lines.push('在「' + best.p.name + '」记得把券和满减都领了，不然到手不是这个价。');
+    if (ship > 0) lines.push('这家有 ¥' + ship.toFixed(2) + ' 运费，凑包邮或换个店铺可能更便宜。');
+
+    var notes = {
+      taobao: '淘宝同类店铺多，翻两家对比一下再下单，差距常在 5% 以上。',
+      jd: '京东自营通常更快，差价在 5% 以内的话，选自营更省心。',
+      pdd: '拼多多百亿补贴价低，下单前确认是官方旗舰店或百亿补贴标。',
+      dewu: '得物价格含鉴别服务，和别家差 10% 以内算合理。'
+    };
+    if (notes[best.p.id]) lines.push(notes[best.p.id]);
+
+    if (totals.length >= 2) {
+      var gap = (totals[1].t - best.t) / best.t;
+      if (gap < 0.03) lines.push('前两名差价不到 3%，哪边发货快、售后好就选哪边。');
+    }
+    if (price && coupon && coupon / price > 0.3) lines.push('优惠力度超过三成，再确认一下是不是临期、二手或者型号不同。');
+
+    return lines.map(function (s) { return '· ' + s; }).join('<br>');
+  }
+
+  // ---------- 历史 ----------
+  function renderHistory() {
+    histCountEl.textContent = state.history.length ? state.history.length + ' 条' : '';
+    historyEl.innerHTML = '';
+    if (!state.history.length) {
+      historyEl.innerHTML = '<div class="empty-tip">还没有记录。填完价格点「存进比价记录」。</div>';
+      return;
+    }
+    state.history.forEach(function (h, i) {
+      var d = document.createElement('div');
+      d.className = 'hist';
+      var main = document.createElement('div');
+      main.className = 'h-main';
+      main.innerHTML = '<div class="h-kw">' + escapeHtml(h.kw) + '</div>' +
+        '<div class="h-sub">' + escapeHtml(h.winner) + ' 最便宜 · ' + h.time + '</div>';
+      var price = document.createElement('div');
+      price.className = 'h-price';
+      price.textContent = '¥' + Number(h.price).toFixed(2);
+      var del = document.createElement('button');
+      del.className = 'h-del';
+      del.type = 'button';
+      del.textContent = '×';
+      del.addEventListener('click', function () {
+        state.history.splice(i, 1);
+        save();
+        renderHistory();
+      });
+      d.appendChild(main);
+      d.appendChild(price);
+      d.appendChild(del);
+      d.addEventListener('click', function (e) {
+        if (e.target === del) return;
+        kwEl.value = h.kw;
+        state.kw = h.kw;
+        toast('已填回搜索词：' + h.kw);
+      });
+      historyEl.appendChild(d);
+    });
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+    });
+  }
+
+  // ---------- 事件 ----------
+  goBtn.addEventListener('click', function () {
+    var kw = (kwEl.value || '').trim();
+    if (!kw) { kwEl.focus(); toast('先说一下想买什么'); return; }
+    state.kw = kw;
+    save();
+    toast('关键词已记下，点下面的平台去搜');
+    document.getElementById('platforms').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+
+  kwEl.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); goBtn.click(); }
+  });
+
+  document.getElementById('saveBtn').addEventListener('click', function () {
+    var kw = (kwEl.value || '').trim() || state.kw || '未命名';
+    var totals = [];
+    PLATFORMS.forEach(function (p) {
+      var o = getOffer(p.id);
+      var t = totalOf(o);
+      if (t !== null) totals.push({ p: p, t: t });
+    });
+    if (!totals.length) { toast('还没有价格可以存'); return; }
+    totals.sort(function (a, b) { return a.t - b.t; });
+    var now = new Date();
+    state.history.unshift({
+      kw: kw,
+      winner: totals[0].p.name,
+      price: totals[0].t,
+      time: (now.getMonth() + 1) + '/' + now.getDate() + ' ' +
+        String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0')
+    });
+    state.history = state.history.slice(0, 50);
+    save();
+    renderHistory();
+    toast('已存进记录');
+  });
+
+  document.getElementById('copyBtn').addEventListener('click', function () {
+    var kw = (kwEl.value || '').trim() || state.kw;
+    var totals = [];
+    PLATFORMS.forEach(function (p) {
+      var t = totalOf(getOffer(p.id));
+      if (t !== null) totals.push({ n: p.name, t: t });
+    });
+    if (!totals.length) { toast('还没有价格'); return; }
+    totals.sort(function (a, b) { return a.t - b.t; });
+    var lines = ['【比价】' + kw];
+    totals.forEach(function (x) { lines.push(x.n + '：¥' + x.t.toFixed(2)); });
+    lines.push('最低：' + totals[0].n + ' ¥' + totals[0].t.toFixed(2));
+    copyText(lines.join('\n')).then(function (ok) {
+      toast(ok ? '结论已复制' : '复制失败，手动截个图吧');
+    });
+  });
+
+  // ---------- 初始化 ----------
+  state = load();
+  kwEl.value = state.kw || '';
+  renderPlatforms();
+  renderRows();
+  renderHistory();
+})();
+</script>
+</body>
+</html>
