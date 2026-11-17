@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<title>无畏契约 · 玩法转盘</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    background: radial-gradient(1200px 800px at 50% -10%, #1b2230 0%, #0f1115 55%, #08090c 100%);
+    color: #eef2f7; overflow: hidden; overscroll-behavior: none;
+    display: flex; flex-direction: column;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  header { flex: 0 0 auto; padding: 12px 16px 8px; display: flex; align-items: center; gap: 10px; }
+  .brand { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; overflow: hidden; }
+  .brand h1 { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: .5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .brand .sub { font-size: 12px; color: #8b95a5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .brand .sub b { color: #ff5b6e; font-weight: 700; }
+  .icon-btn {
+    flex: 0 0 auto; border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.06);
+    color: #e8edf5; border-radius: 10px; padding: 8px 13px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit;
+  }
+  .icon-btn:active { transform: scale(.96); }
+
+  /* 选中结果区 */
+  .picked {
+    flex: 0 0 auto; margin: 2px 14px 6px; padding: 12px 14px 13px;
+    border-radius: 14px; border: 1px solid rgba(255,255,255,.09);
+    background: linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.02));
+    min-height: 88px; position: relative; overflow: hidden;
+    transition: border-color .25s ease, background .25s ease;
+  }
+  .picked::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: linear-gradient(180deg, #ff5b6e, #ff9f6e); opacity: .55; transition: opacity .25s;
+  }
+  .picked.spinning::before { opacity: 1; animation: pulse 1s ease-in-out infinite; }
+  .picked.has-result { border-color: rgba(255,91,110,.38); background: linear-gradient(180deg, rgba(255,91,110,.10), rgba(255,255,255,.02)); }
+  .picked.has-result::before { opacity: 1; }
+  @keyframes pulse { 0%,100% { opacity: .35 } 50% { opacity: 1 } }
+
+  .picked .row1 { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+  .picked .tag {
+    font-size: 10.5px; letter-spacing: 1px; padding: 2px 8px; border-radius: 999px;
+    background: rgba(255,255,255,.12); color: #cdd6e3; font-weight: 700; flex: 0 0 auto;
+  }
+  .picked.has-result .tag { background: #ffd166; color: #14181f; }
+  .picked .name {
+    font-size: 18px; font-weight: 800; letter-spacing: .6px; line-height: 1.25;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .picked.has-result .name { font-size: 21px; }
+  .picked .desc {
+    margin: 0; font-size: 12.5px; line-height: 1.6; color: #9fabbb;
+    display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .picked.has-result .desc { color: #c4ceda; }
+
+  main { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 0 12px 6px; }
+  #stage { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+  #wheel { display: block; border-radius: 50%; box-shadow: 0 18px 50px rgba(0,0,0,.55), 0 0 0 8px rgba(255,255,255,.04); touch-action: none; }
+  .pointer {
+    position: absolute; top: 0; left: 50%; transform: translate(-50%, -2px); width: 0; height: 0;
+    border-left: 13px solid transparent; border-right: 13px solid transparent;
+    border-top: 26px solid #ff4155; filter: drop-shadow(0 3px 6px rgba(0,0,0,.5)); z-index: 3; pointer-events: none;
+  }
+  .pointer::after { content: ""; position: absolute; left: -7px; top: -26px; width: 14px; height: 14px; background: #ff4155; border-radius: 50%; }
+  #spinBtn {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: 22%; max-width: 92px; aspect-ratio: 1; min-width: 60px;
+    border-radius: 50%; border: none; cursor: pointer; z-index: 2;
+    background: radial-gradient(circle at 35% 30%, #ffffff, #ffe7ec 55%, #ffb9c6 100%);
+    color: #d61f37; font-size: clamp(15px, 4.4vw, 22px); font-weight: 900; letter-spacing: 2px;
+    box-shadow: 0 6px 18px rgba(0,0,0,.35), inset 0 -3px 8px rgba(214,31,55,.18); font-family: inherit;
+  }
+  #spinBtn:active { transform: translate(-50%, -50%) scale(.95); }
+  #spinBtn[disabled] { filter: grayscale(.35); opacity: .85; }
+
+  footer { flex: 0 0 auto; padding: 0 16px 12px; text-align: center; font-size: 11.5px; color: #6d7787; line-height: 1.6; }
+
+  /* 编辑器 */
+  .sheet {
+    position: fixed; inset: 0; z-index: 30; background: #0f131a; display: flex; flex-direction: column;
+    transform: translateY(100%); transition: transform .26s cubic-bezier(.2,.8,.2,1); padding-top: env(safe-area-inset-top);
+  }
+  .sheet.show { transform: translateY(0); }
+  .sheet-head { flex: 0 0 auto; padding: 14px 16px 10px; border-bottom: 1px solid rgba(255,255,255,.08); }
+  .sheet-head .row1 { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .sheet-head h3 { margin: 0; font-size: 16px; }
+  .sheet-head .hint { margin: 6px 0 0; font-size: 11.5px; color: #7d8796; line-height: 1.6; }
+  .tools { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .tools button {
+    border: 1px solid rgba(255,255,255,.13); background: rgba(255,255,255,.06); color: #dfe6f0;
+    border-radius: 9px; padding: 7px 11px; font-size: 12.5px; font-weight: 600; cursor: pointer; font-family: inherit;
+  }
+  .tools button.danger { color: #ff8a97; border-color: rgba(255,90,110,.35); background: rgba(255,90,110,.08); }
+  .list { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 10px 14px 30px; }
+  .item {
+    display: grid; grid-template-columns: 28px 1fr 34px; gap: 8px; align-items: start;
+    padding: 10px 10px 10px 6px; border-radius: 12px; background: rgba(255,255,255,.035); margin-bottom: 8px; border: 1px solid transparent;
+  }
+  .item:focus-within { border-color: rgba(255,91,110,.45); background: rgba(255,91,110,.05); }
+  .item .idx { font-size: 12px; color: #5f6a7b; text-align: center; padding-top: 9px; font-variant-numeric: tabular-nums; }
+  .item .fields { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+  .item input {
+    width: 100%; background: transparent; border: none; outline: none; color: #eef3fa; font-family: inherit;
+    font-size: 14.5px; font-weight: 650; padding: 3px 2px; border-bottom: 1px dashed rgba(255,255,255,.09);
+  }
+  .item input.desc { font-size: 12.5px; font-weight: 400; color: #93a0b2; }
+  .item .del { border: none; background: transparent; color: #6d7787; font-size: 18px; cursor: pointer; padding: 4px; line-height: 1; }
+  .item .del:active { color: #ff5b6e; }
+  .empty { text-align: center; color: #6b7585; padding: 40px 10px; font-size: 13px; }
+
+  @media (min-width: 760px) {
+    header { padding: 18px 26px 8px; }
+    .brand h1 { font-size: 19px; }
+    .picked { margin: 4px 26px 8px; padding: 14px 18px; }
+    .picked .name { font-size: 20px; }
+    .picked.has-result .name { font-size: 24px; }
+    .picked .desc { font-size: 13.5px; }
+    main { padding: 0 20px 10px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <h1>无畏契约 · 玩法转盘</h1>
+    <div class="sub">共 <b id="count">66</b> 条玩法 · 等概率 · 转到哪条打哪条</div>
+  </div>
+  <button class="icon-btn" id="editBtn">编辑</button>
+</header>
+
+<section class="picked" id="picked">
+  <div class="row1">
+    <span class="tag" id="pTag">待抽取</span>
+    <span class="name" id="pName">点中间的「转」开始</span>
+  </div>
+  <p class="desc" id="pDesc">66 条玩法等概率抽取，转到哪条这把就执行哪条。想改规则点右上角「编辑」。</p>
+</section>
+
+<main>
+  <div id="stage">
+    <canvas id="wheel"></canvas>
+    <div class="pointer"></div>
+    <button id="spinBtn" aria-label="开始转动">转</button>
+  </div>
+</main>
+
+<footer>点中间按「转」或按空格 · 结果只作娱乐参考，别真跟队友急</footer>
+
+<!-- 编辑器 -->
+<div class="sheet" id="sheet">
+  <div class="sheet-head">
+    <div class="row1">
+      <h3>玩法列表</h3>
+      <button class="icon-btn" id="closeEdit">完成</button>
+    </div>
+    <p class="hint">直接改文字即可，自动保存在这台设备的浏览器里。标题是转盘上显示的字，说明是抽中后在上方展开的完整玩法。</p>
+    <div class="tools">
+      <button id="addBtn">+ 添加一条</button>
+      <button id="exportBtn">导出 JSON</button>
+      <button id="importBtn">导入 JSON</button>
+      <button class="danger" id="resetBtn">恢复默认 66 条</button>
+      <input type="file" id="fileInput" accept=".json,application/json" hidden>
+    </div>
+  </div>
+  <div class="list" id="list"></div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ============ 默认 66 条玩法 ============
+  var DEFAULT_RULES = [
+    // 枪械 · 经济
+    { n: '暴徒信徒', c: '枪械', d: '整局只认暴徒（Vandal）。地上躺着的幻影、大狙一概不碰，手滑买错就当场丢给队友，下一回合换回来。' },
+    { n: '幻影党', c: '枪械', d: '只买幻影（Phantom），暴徒碰都不碰。别人塞给你的暴徒一律退回，就当自己是幻影代言人。' },
+    { n: '警长局', c: '枪械', d: '除手枪局外只能买警长（Sheriff），剩下的钱全塞技能。一枪一个才叫帅，打不中就认。' },
+    { n: '喷子局', c: '枪械', d: '只能买判官（Judge）或雄鹿（Bucky）。全程贴墙角、猫门后，等对面自己撞进射程。' },
+    { n: '冲锋枪信仰', c: '枪械', d: '只买刺针（Stinger）或幽灵（Spectre）。别指望远距离对枪，绕后、贴脸、打完就撤。' },
+    { n: '机枪架点', c: '枪械', d: '只买战神（Ares）或奥丁（Odin），必须蹲点扫射。有人从烟里冒头就按住左键别撒手。' },
+    { n: '手枪续命', c: '枪械', d: '第二回合起只买经典手枪（Classic），省下的钱全给队友。打不死人没关系，气势要有。' },
+    { n: '半价人生', c: '经济', d: '每回合最多花掉一半经济，剩下一分都不许动。穷着打，赢了才叫本事。' },
+    { n: '军火商', c: '经济', d: '每回合先给队友买枪，自己最后再说。队友没枪，你先别买。' },
+    { n: '赤膊上阵', c: '经济', d: '整局不买护甲，被打一下就是残血。玩的就是心跳。' },
+    { n: '清空钱包', c: '经济', d: '买完装备必须把余额花到 800 以下。剩钱就是浪费，买满了再上。' },
+    { n: '存钱罐', c: '经济', d: '每回合结束必须留 4000 以上。别满编起枪，穷着赢对面才爽。' },
+    { n: '技能至上', c: '经济', d: '每回合技能点必须买满，枪只买最便宜那把。靠技能打架，靠枪保命。' },
+    { n: '一把枪到底', c: '枪械', d: '整局锁定同一种枪，死多少次都不许换型号。熟能生巧，也可能一直死。' },
+
+    // 移动 · 走位
+    { n: '队友不开张不许跑', c: '走位', d: '队友拿到第一个人头之前，你只能走路。想跑？等队友先开张。' },
+    { n: '全程静步', c: '走位', d: '整局只用静步，脚步声一点都不能有。像影子一样摸进点里。' },
+    { n: '蹲是原罪', c: '走位', d: '全程禁止蹲，站着打。蹲一次全队请你喝水。' },
+    { n: '不许跳', c: '走位', d: '除了上箱子，跳跃键当它坏了。被闪光弹闪到也不许跳。' },
+    { n: '倒着撤退', c: '走位', d: '后退只能用 S 键倒着走，不许转身跑。像被逼到墙角的反派。' },
+    { n: '换弹必走位', c: '走位', d: '每次换弹必须边走边换，站着换弹算白给。' },
+    { n: '打一枪换一地', c: '走位', d: '每开一枪换个掩体，绝不在同一个位置开第二枪。' },
+    { n: '贴墙怪', c: '走位', d: '全程贴墙走，中路这种大马路不许过。墙是你的第二把枪。' },
+    { n: '过门必跳', c: '走位', d: '每穿过一个门框跳一下，跳不过去就绕路。' },
+    { n: '禁止空格键', c: '走位', d: '整局不按跳跃键，上箱子靠爬。手痒也不行。' },
+    { n: '单线人生', c: '走位', d: '攻防都只走同一条路，队友去哪都别跟。头铁到底。' },
+    { n: '单人路', c: '走位', d: '每回合独自守一条路，不许和队友叠点。一个人一条线，死了算你的。' },
+
+    // 技能 · 特工
+    { n: '技能杀人', c: '技能', d: '主要靠技能拿人头，枪只用来补伤害和保命。闪、烟、燃烧弹都是你的武器。' },
+    { n: '大招即用', c: '技能', d: '大招一好立刻放，留着就是浪费。哪怕放着玩也得放。' },
+    { n: '无烟局', c: '技能', d: '禁烟。进点全靠身法，别指望烟幕遮羞。' },
+    { n: '无闪局', c: '技能', d: '禁闪。闪到自己人算违规，老老实实靠枪法。' },
+    { n: '瞎眼自罚', c: '技能', d: '被对面闪光命中，立刻原地转身数三秒，期间不许开枪。' },
+    { n: '侦查封锁', c: '技能', d: '禁用所有侦查技能，靠耳朵听脚步判断人在哪。' },
+    { n: '全员辅助', c: '技能', d: '整局只玩辅助型特工（贤者、斯凯、哈勃这种），别选纯对枪位。' },
+    { n: '技能必须清空', c: '技能', d: '每回合结束前技能必须全放完，留着过夜算违规。' },
+    { n: '蹲坑达人', c: '技能', d: '防守每回合都守同一个点，被打穿也不换地方。' },
+    { n: '技能盲盒', c: '技能', d: '每回合开始前给自己随机指定一个技能，必须先放掉它才能干别的。' },
+    { n: '反向大招', c: '技能', d: '大招只准在 1v2 以下残局放，顺风局不许开。' },
+    { n: '技能接力', c: '技能', d: '等队友先把技能用完你再上，抢在队友前面算抢戏。' },
+
+    // 团队 · 语音
+    { n: '英文报点', c: '团队', d: '全程英文报点，"B main, two pushing" 这种，说中文罚一次深呼吸。' },
+    { n: '击杀宣言', c: '团队', d: '每杀一个人喊一句台词，不喊这个人头不算。' },
+    { n: '禁止说有人', c: '团队', d: '不许说「有人」「小心」，只能报点位和数字。' },
+    { n: '闭嘴模式', c: '团队', d: '整局闭麦，只能打字交流。手速决定一切。' },
+    { n: '死亡悼词', c: '团队', d: '每次阵亡念一句悼词，太短要重念一遍。' },
+    { n: '集体现身', c: '团队', d: '每回合先在出生点击掌再出发，谁先走谁请水。' },
+    { n: '定时报数', c: '团队', d: '每 30 秒报一次全队位置，漏一次罚一个「？」。' },
+    { n: '只准夸人', c: '团队', d: '全程只能夸队友，一句抱怨都不许有。' },
+    { n: '指挥轮换', c: '团队', d: '每回合换个人指挥，其余四人无条件执行。' },
+    { n: '沉默三十秒', c: '团队', d: '每回合开局 30 秒不许说话，只许听脚步。' },
+    { n: '复读机', c: '团队', d: '队友说啥你复读一遍，漏一个字重来。' },
+    { n: '赛后总结', c: '团队', d: '每回合结束一句话总结失误，最后死的人先说。' },
+
+    // 目标 · 节奏
+    { n: '十五秒下包', c: '节奏', d: '进攻方开局 15 秒内必须下包，下不了这回合算放弃。' },
+    { n: '死守不放', c: '节奏', d: '下包后全队守包点，谁前压谁背锅。' },
+    { n: '拆包要掩护', c: '节奏', d: '拆包必须有人架枪，没人掩护不许蹲下拆。' },
+    { n: '首杀即冲', c: '节奏', d: '拿到首杀全队立刻前压，不许原地等。' },
+    { n: '残局架枪', c: '节奏', d: '1vN 时先原地架 10 秒，再考虑换点。' },
+    { n: '三杀自尽', c: '节奏', d: '拿到三杀主动送掉，不许拿第四个人头。' },
+    { n: '一换一', c: '节奏', d: '每回合必须和对面换掉一个人，换不到算白打。' },
+    { n: '不许存钱', c: '节奏', d: '每回合满编起枪，禁止经济局。' },
+    { n: '全图扫荡', c: '节奏', d: '每回合先清空指定区域，才许推进下一个点。' },
+    { n: '慢打流', c: '节奏', d: '前 60 秒不许开枪，摸点、听声、憋着。' },
+
+    // 搞怪 · 惩罚
+    { n: '俯卧撑惩罚', c: '惩罚', d: '死一次 5 个俯卧撑，比赛结束前做完。' },
+    { n: '学语音', c: '惩罚', d: '每输一局学一句特工语音，学不像加一次。' },
+    { n: '问号惩罚', c: '惩罚', d: '每次死亡聊天框打一个「？」，打别的算违规。' },
+    { n: '被爆头要道歉', c: '惩罚', d: '被爆头说「再来一次」，不说别复活。' },
+    { n: '统一口头禅', c: '惩罚', d: '全队定一句口头禅，关键时刻忘了请喝水。' },
+    { n: '自由发挥', c: '搞怪', d: '当前回合 MVP 现场定一条新规则，打到结束都得遵守。' }
+  ];
+
+  var LS_KEY = 'valorant.wheel.rules.v2';
+  var PALETTE = ['#ffb3c7', '#ff8e6e', '#ffe45c', '#7be8e0', '#ff9be0'];
+
+  var rules = loadRules();
+  var rotation = -Math.PI / 2;
+  var spinning = false;
+
+  var canvas = document.getElementById('wheel');
+  var ctx = canvas.getContext('2d');
+  var spinBtn = document.getElementById('spinBtn');
+  var stage = document.getElementById('stage');
+  var countEl = document.getElementById('count');
+  var listEl = document.getElementById('list');
+  var sheet = document.getElementById('sheet');
+  var picked = document.getElementById('picked');
+  var pTag = document.getElementById('pTag');
+  var pName = document.getElementById('pName');
+  var pDesc = document.getElementById('pDesc');
+
+  function loadRules() {
+    try {
+      var raw = localStorage.getItem(LS_KEY);
+      if (!raw) return clone(DEFAULT_RULES);
+      var arr = JSON.parse(raw);
+      if (!Array.isArray(arr) || !arr.length) return clone(DEFAULT_RULES);
+      return arr.map(function (r) {
+        return { n: String(r && r.n || '未命名'), d: String(r && r.d || ''), c: String(r && r.c || '自定义') };
+      });
+    } catch (e) { return clone(DEFAULT_RULES); }
+  }
+  function clone(arr) { return arr.map(function (r) { return { n: r.n, d: r.d, c: r.c }; }); }
+  function saveRules() { try { localStorage.setItem(LS_KEY, JSON.stringify(rules)); } catch (e) {} }
+
+  var sizePx = 0;
+
+  function layout() {
+    var w = stage.clientWidth, h = stage.clientHeight;
+    var size = Math.max(160, Math.min(w, h));
+    sizePx = size;
+    var dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    canvas.width = Math.round(size * dpr);
+    canvas.height = Math.round(size * dpr);
+    canvas.style.width = size + 'px';
+    canvas.style.height = size + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    draw();
+    // 指针贴住轮盘上沿（轮盘在 stage 里垂直居中，位置会随屏幕变化）
+    var st = stage.getBoundingClientRect();
+    var cv = canvas.getBoundingClientRect();
+    document.querySelector('.pointer').style.top = Math.max(0, cv.top - st.top - 16) + 'px';
+  }
+
+  function draw() {
+    var N = rules.length, S = sizePx, cx = S / 2, cy = S / 2, R = S / 2 - 2, inner = R * 0.255;
+    ctx.clearRect(0, 0, S, S);
+    if (!N) {
+      ctx.fillStyle = '#1a2130';
+      ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#6b7585'; ctx.font = '600 ' + Math.max(12, S * 0.04) + 'px system-ui, sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('还没有玩法，点右上角「编辑」添加', cx, cy + R * 0.55);
+      return;
+    }
+
+    var step = Math.PI * 2 / N;
+    for (var i = 0; i < N; i++) {
+      var a0 = rotation + i * step, a1 = a0 + step;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a0) * inner, cy + Math.sin(a0) * inner);
+      ctx.arc(cx, cy, R, a0, a1);
+      ctx.arc(cx, cy, inner, a1, a0, true);
+      ctx.closePath();
+      ctx.fillStyle = PALETTE[i % PALETTE.length];
+      ctx.fill();
+      if (N <= 90) {
+        ctx.strokeStyle = 'rgba(255,255,255,.55)';
+        ctx.lineWidth = N > 40 ? 0.8 : 1.2;
+        ctx.stroke();
+      }
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(a0 + step / 2);
+      var arcW = (Math.PI * 2 * R * 0.72) / N;
+      var fs = Math.min(19, Math.max(8, arcW * 0.85));
+      ctx.font = '800 ' + fs.toFixed(1) + 'px -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,.97)';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      ctx.shadowColor = 'rgba(0,0,0,.28)';
+      ctx.shadowBlur = 3;
+      var text = rules[i].n, maxLen = R * 0.52;
+      while (ctx.measureText(text).width > maxLen && text.length > 1) text = text.slice(0, -1);
+      if (text !== rules[i].n) text += '…';
+      ctx.fillText(text, R * 0.94, 0);
+      ctx.restore();
+    }
+
+    ctx.beginPath(); ctx.arc(cx, cy, inner * 1.02, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = 'rgba(0,0,0,.28)'; ctx.shadowBlur = S * 0.03;
+    ctx.fill(); ctx.shadowBlur = 0;
+
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = Math.max(2, S * 0.008); ctx.stroke();
+  }
+
+  function spin() {
+    if (spinning || !rules.length) return;
+    spinning = true;
+    spinBtn.disabled = true;
+    spinBtn.textContent = '…';
+    picked.classList.remove('has-result');
+    picked.classList.add('spinning');
+    pTag.textContent = '转动中';
+    pName.textContent = '看看这把要干嘛…';
+    pDesc.textContent = '别急，马上出结果。';
+
+    var N = rules.length, step = Math.PI * 2 / N;
+    var idx = Math.floor(Math.random() * N);
+    var target = -Math.PI / 2 - (idx + 0.5) * step + (Math.random() - 0.5) * step * 0.55;
+    var start = rotation;
+    var delta = ((target - start) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+    var turns = 5 + Math.floor(Math.random() * 3);
+    var end = start + delta + turns * Math.PI * 2;
+    var dur = 4200 + Math.random() * 600;
+    var t0 = performance.now();
+
+    function frame(t) {
+      var p = Math.min(1, (t - t0) / dur);
+      var e = 1 - Math.pow(1 - p, 3.4);
+      rotation = start + (end - start) * e;
+      draw();
+      if (p < 1) {
+        requestAnimationFrame(frame);
+      } else {
+        rotation = end % (Math.PI * 2);
+        spinning = false;
+        spinBtn.disabled = false;
+        spinBtn.textContent = '转';
+        showResult(idx);
+      }
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function showResult(i) {
+    var r = rules[i];
+    if (!r) return;
+    picked.classList.remove('spinning');
+    picked.classList.add('has-result');
+    pTag.textContent = r.c || '玩法';
+    pName.textContent = r.n;
+    pDesc.textContent = r.d || '这条没有补充说明，现场自由发挥。';
+    if (navigator.vibrate) { try { navigator.vibrate(30); } catch (e) {} }
+  }
+
+  function renderList() {
+    countEl.textContent = rules.length;
+    listEl.innerHTML = '';
+    if (!rules.length) {
+      listEl.innerHTML = '<div class="empty">列表是空的，点上方「+ 添加一条」开始。</div>';
+      return;
+    }
+    rules.forEach(function (r, i) {
+      var row = document.createElement('div');
+      row.className = 'item';
+
+      var idx = document.createElement('div');
+      idx.className = 'idx';
+      idx.textContent = i + 1;
+
+      var fields = document.createElement('div');
+      fields.className = 'fields';
+
+      var nameInput = document.createElement('input');
+      nameInput.value = r.n;
+      nameInput.maxLength = 24;
+      nameInput.placeholder = '转盘上显示的名字';
+      nameInput.addEventListener('input', function () {
+        r.n = nameInput.value || '未命名';
+        saveRules(); draw();
+      });
+
+      var descInput = document.createElement('input');
+      descInput.className = 'desc';
+      descInput.value = r.d;
+      descInput.placeholder = '抽中后显示的完整玩法';
+      descInput.addEventListener('input', function () { r.d = descInput.value; saveRules(); });
+
+      fields.appendChild(nameInput);
+      fields.appendChild(descInput);
+
+      var del = document.createElement('button');
+      del.className = 'del';
+      del.type = 'button';
+      del.textContent = '×';
+      del.title = '删除';
+      del.addEventListener('click', function () {
+        rules.splice(i, 1);
+        saveRules(); renderList(); draw();
+      });
+
+      row.appendChild(idx);
+      row.appendChild(fields);
+      row.appendChild(del);
+      listEl.appendChild(row);
+    });
+  }
+
+  function openEditor() { renderList(); sheet.classList.add('show'); }
+  function closeEditor() { sheet.classList.remove('show'); layout(); }
+
+  document.getElementById('editBtn').addEventListener('click', openEditor);
+  document.getElementById('closeEdit').addEventListener('click', closeEditor);
+
+  document.getElementById('addBtn').addEventListener('click', function () {
+    rules.push({ n: '新玩法 ' + (rules.length + 1), d: '', c: '自定义' });
+    saveRules(); renderList(); draw();
+    listEl.scrollTop = listEl.scrollHeight;
+    var inputs = listEl.querySelectorAll('.item input');
+    if (inputs.length) inputs[inputs.length - 2].focus();
+  });
+
+  document.getElementById('resetBtn').addEventListener('click', function () {
+    if (!confirm('恢复成默认的 66 条玩法？你改过的内容会被覆盖。')) return;
+    rules = clone(DEFAULT_RULES);
+    saveRules(); renderList(); layout();
+  });
+
+  document.getElementById('exportBtn').addEventListener('click', function () {
+    var blob = new Blob([JSON.stringify(rules, null, 2)], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'valorant-wheel-rules.json';
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+  });
+
+  var fileInput = document.getElementById('fileInput');
+  document.getElementById('importBtn').addEventListener('click', function () { fileInput.click(); });
+  fileInput.addEventListener('change', function () {
+    var f = fileInput.files && fileInput.files[0];
+    if (!f) return;
+    var fr = new FileReader();
+    fr.onload = function () {
+      try {
+        var arr = JSON.parse(String(fr.result));
+        if (!Array.isArray(arr) || !arr.length) throw new Error('bad');
+        rules = arr.map(function (r) {
+          return { n: String(r.n || '未命名'), d: String(r.d || ''), c: String(r.c || '自定义') };
+        });
+        saveRules(); renderList(); layout();
+      } catch (e) { alert('导入失败：需要一个包含 name / desc 的 JSON 数组'); }
+      fileInput.value = '';
+    };
+    fr.readAsText(f);
+  });
+
+  spinBtn.addEventListener('click', spin);
+  window.addEventListener('keydown', function (e) {
+    if (e.code === 'Space' && !spinning) {
+      if (document.activeElement && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
+      e.preventDefault();
+      spin();
+    }
+    if (e.key === 'Escape' && sheet.classList.contains('show')) closeEditor();
+  });
+  window.addEventListener('resize', layout);
+  window.addEventListener('orientationchange', function () { setTimeout(layout, 250); });
+
+  countEl.textContent = rules.length;
+  layout();
+
+  // 调试：地址后加 #result 直接展示第 4 条，加 #spin 自动转
+  if (location.hash === '#result') setTimeout(function () { showResult(3); }, 200);
+  if (location.hash === '#spin') setTimeout(spin, 300);
+  if (location.hash === '#measure') setTimeout(function () {
+    document.title = 'M ' + innerWidth + 'x' + innerHeight + ' stage ' + stage.clientWidth + 'x' + stage.clientHeight + ' canvas ' + sizePx;
+  }, 300);
+})();
+</script>
+</body>
+</html>
