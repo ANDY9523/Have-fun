@@ -145,12 +145,15 @@
   <section>
     <div class="sec-title">
       <h2>填你看到的价格</h2>
-      <button class="mini" id="importBtn">粘贴机器人结果</button>
+      <button class="mini" id="importBtn">粘贴价格</button>
     </div>
     <div class="import" id="importPanel" style="display:none">
-      <textarea id="importText" placeholder="把安卓比价机器人复制出来的 JSON 粘到这里（脚本在仓库 pricebot.js）"></textarea>
+      <div class="row" style="margin-top:0;margin-bottom:8px">
+        <button class="ok" id="clipBtn">从剪贴板识别</button>
+        <button id="importCancel">收起</button>
+      </div>
+      <textarea id="importText" placeholder="把 App 里的价格文字粘进来，比如：&#10;【淘宝】罗技 G304 无线鼠标 ¥199 券后 179&#10;或直接粘分享文案、截图识别出来的文字"></textarea>
       <div class="row">
-        <button id="importCancel">取消</button>
         <button class="ok" id="importDo">解析并填入</button>
       </div>
     </div>
@@ -522,7 +525,7 @@
     });
   });
 
-  // ---------- 导入机器人结果 ----------
+  // ---------- 粘贴识别价格 ----------
   var importBtn = document.getElementById('importBtn');
   var importPanel = document.getElementById('importPanel');
   var importText = document.getElementById('importText');
@@ -536,41 +539,99 @@
     importPanel.style.display = 'none';
   });
 
-  var NAME2ID = { '淘宝': 'taobao', '天猫': 'taobao', '京东': 'jd', '拼多多': 'pdd', '得物': 'dewu' };
+  var PLATFORM_WORDS = [
+    { id: 'taobao', words: ['淘宝', '天猫', 'taobao', 'tmall', '淘口令'] },
+    { id: 'jd', words: ['京东', 'jd', '京东价', '自营'] },
+    { id: 'pdd', words: ['拼多多', 'pdd', '百亿补贴', '拼单'] },
+    { id: 'dewu', words: ['得物', '毒', 'dewu', '鉴别'] }
+  ];
 
-  document.getElementById('importDo').addEventListener('click', function () {
-    var raw = (importText.value || '').trim();
-    if (!raw) { toast('先粘贴 JSON'); return; }
-    var obj;
-    try { obj = JSON.parse(raw); } catch (e) { toast('JSON 格式不对'); return; }
+  function detectPlatform(text) {
+    for (var i = 0; i < PLATFORM_WORDS.length; i++) {
+      var p = PLATFORM_WORDS[i];
+      for (var j = 0; j < p.words.length; j++) {
+        if (text.indexOf(p.words[j]) >= 0) return p.id;
+      }
+    }
+    return null;
+  }
 
-    var data = obj.data || obj;
-    if (typeof data !== 'object' || !data) { toast('没找到 data 字段'); return; }
+  // 从任意文本里抠出价格（优先「到手价/券后」，其次带 ¥，最后「199元」）
+  function extractPrices(text) {
+    var hits = [];
+    function push(v, kind) {
+      if (!isFinite(v) || v <= 0 || v >= 1000000) return;
+      hits.push({ v: v, kind: kind });
+    }
+    var num = '(\\d{1,3}(?:,\\d{3})*(?:\\.\\d{1,2})?|\\d{1,6}(?:\\.\\d{1,2})?)';
+    var m;
 
-    var filled = 0, summary = [];
-    Object.keys(data).forEach(function (name) {
-      var pid = NAME2ID[name] || NAME2ID[name.replace(/\s/g, '')];
-      if (!pid) return;
-      var list = data[name];
-      if (!Array.isArray(list) || !list.length) return;
-      var min = null;
-      list.forEach(function (it) {
-        var p = Number(it && it.price);
-        if (isFinite(p) && p > 0 && (min === null || p < min)) min = p;
-      });
-      if (min === null) return;
-      var o = getOffer(pid);
-      o.price = String(min);
-      filled++;
-      summary.push(name + ' ¥' + min);
+    var re1 = new RegExp('(?:¥|￥|RMB)\\s*' + num, 'g');
+    while ((m = re1.exec(text)) !== null) push(parseFloat(m[1].replace(/,/g, '')), 'sym');
+
+    var re2 = new RegExp(num + '\\s*(?:元|块)', 'g');
+    while ((m = re2.exec(text)) !== null) push(parseFloat(m[1].replace(/,/g, '')), 'yuan');
+
+    var re3 = new RegExp('(?:到手价|券后价|券后|实付|促销价|活动价|拼单价|秒杀价)\\D{0,6}' + num, 'g');
+    while ((m = re3.exec(text)) !== null) push(parseFloat(m[1].replace(/,/g, '')), 'label');
+
+    if (!hits.length) return [];
+    var rank = { label: 0, sym: 1, yuan: 2 };
+    hits.sort(function (a, b) {
+      if (rank[a.kind] !== rank[b.kind]) return rank[a.kind] - rank[b.kind];
+      return a.v - b.v;
     });
+    var bestKind = hits[0].kind;
+    var pool = hits.filter(function (h) { return h.kind === bestKind; });
+    pool.sort(function (a, b) { return a.v - b.v; });
+    var uniq = [];
+    pool.forEach(function (h) { if (uniq.indexOf(h.v) < 0) uniq.push(h.v); });
+    return uniq;
+  }
+  function applyText(raw) {
+    if (!raw) { toast('没有识别到文字'); return; }
+    var prices = extractPrices(raw);
+    if (!prices.length) { toast('这段文字里没找到价格'); return; }
 
-    if (!filled) { toast('没识别到可用的平台数据'); return; }
+    var pid = detectPlatform(raw);
+    var price = prices[0];
+
+    if (!pid) {
+      // 识别不出平台，就填到第一个空着的平台里
+      var empty = PLATFORMS.filter(function (p) { return totalOf(getOffer(p.id)) === null; });
+      if (!empty.length) { toast('四个平台都填过了，先清一个再试'); return; }
+      pid = empty[0].id;
+      toast('没认出平台，先填到「' + empty[0].name + '」，价格 ¥' + price);
+    } else {
+      toast('识别到 ¥' + price + '（共 ' + prices.length + ' 个价格，取最低）');
+    }
+
+    var o = getOffer(pid);
+    o.price = String(price);
     save();
     renderRows();
     importPanel.style.display = 'none';
     importText.value = '';
-    toast('已填入 ' + filled + ' 个平台：' + summary.join(' / '));
+  }
+
+  document.getElementById('importDo').addEventListener('click', function () {
+    applyText((importText.value || '').trim());
+  });
+
+  document.getElementById('clipBtn').addEventListener('click', function () {
+    if (!navigator.clipboard || !navigator.clipboard.readText) {
+      toast('这个浏览器不支持直接读剪贴板，请手动粘贴到下面');
+      importText.focus();
+      return;
+    }
+    navigator.clipboard.readText().then(function (txt) {
+      if (!txt) { toast('剪贴板是空的'); return; }
+      importText.value = txt;
+      applyText(txt);
+    }).catch(function () {
+      toast('读取剪贴板被拒绝，请手动长按粘贴');
+      importText.focus();
+    });
   });
 
   // ---------- 初始化 ----------
