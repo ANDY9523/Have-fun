@@ -112,7 +112,7 @@
   // ---------- 生成枝干 ----------
   function build() {
     branches = [];
-    var LEVELS = 44;                     // 层数越多越细密
+    var LEVELS = 56;                     // 层数越多越细密
     for (var li = 0; li < LEVELS; li++) {
       var k = li / (LEVELS - 1);         // 0 顶 → 1 底
       if (k > 0.94) continue;            // 底部留给树干
@@ -120,7 +120,7 @@
       var R = geo.maxR * Math.pow(k, 1.08);
       if (R < 2) continue;
 
-      var n = Math.round(6 + 12 * k);
+      var n = Math.round(8 + 15 * k);
       for (var b = 0; b < n; b++) {
         var side = (b % 2 === 0) ? -1 : 1;
         var spread = R * rnd(0.58, 1.05);
@@ -322,7 +322,7 @@
       var yy = geo.topY + geo.h * kk;
       var rx = geo.maxR * Math.pow(kk, 1.07) * 0.98;
       var ry = Math.max(0.8, rx * 0.15);
-      g.fillStyle = 'hsla(152, 32%, ' + (6 + 4 * kk).toFixed(1) + '%, ' + (0.9 + 0.08 * kk) + ')';
+      g.fillStyle = 'hsla(150, 30%, ' + (9 + 5 * kk).toFixed(1) + '%, ' + (0.96 + 0.03 * kk) + ')';
       g.beginPath(); g.ellipse(geo.cx, yy, rx, ry, 0, 0, Math.PI * 2); g.fill();
     }
 
@@ -341,6 +341,27 @@
     g.lineCap = 'round';
     for (var i = 0; i < branches.length; i++) drawBranch(g, branches[i]);
 
+    // 前向填充：用短针叶把缝隙补满，避免"正前方透过去"
+    g.lineCap = 'round';
+    var fillN = Math.round(Math.min(5200, Math.max(2200, W * 6)));
+    for (var fi = 0; fi < fillN; fi++) {
+      var fk = Math.pow(Math.random(), 0.85);
+      var fy = geo.topY + geo.h * fk;
+      var fR = geo.maxR * Math.pow(fk, 1.06);
+      var fang = Math.random() * Math.PI * 2;
+      if (Math.sin(fang) < 0 && Math.random() < 0.55) continue;   // 后半圈少一些
+      var frr = fR * rnd(0.04, 1.0);
+      var fx = geo.cx + Math.cos(fang) * frr;
+      var fyy = fy + Math.sin(fang) * frr * 0.16;
+      var flen = rnd(1.6, 4.4);
+      var fa = rnd(-Math.PI, Math.PI);
+      g.beginPath();
+      g.moveTo(fx, fyy);
+      g.lineTo(fx + Math.cos(fa) * flen, fyy + Math.sin(fa) * flen);
+      g.lineWidth = rnd(0.3, 0.72);
+      g.strokeStyle = 'hsla(' + rnd(144, 160) + ',' + rnd(24, 46) + '%,' + rnd(9, 22) + '%,' + rnd(0.4, 0.85) + ')';
+      g.stroke();
+    }
     // 明暗
     g.globalCompositeOperation = 'source-atop';
     var sg = g.createLinearGradient(geo.cx - geo.maxR, 0, geo.cx + geo.maxR, 0);
@@ -392,7 +413,7 @@
     g.strokeStyle = 'hsl(' + b.hue + ',' + (b.sat * 0.55) + '%,' + (b.light * 0.5) + '%)';
     g.stroke();
 
-    var steps = 12;
+    var steps = 15;
     for (var s = 1; s <= steps; s++) {
       var t = s / steps;
       var px = quad(b.x0, b.cxp, b.x1, t);
@@ -404,11 +425,11 @@
 
       for (var n = 0; n < fan; n++) {
         var na = ang + rnd(-0.95, 0.95) + (b.side > 0 ? 0.2 : -0.2);
-        var len = rnd(3, 10) * (0.55 + 0.75 * t);
+        var len = rnd(2, 7) * (0.55 + 0.75 * t);
         g.beginPath();
         g.moveTo(px, py);
         g.lineTo(px + Math.cos(na) * len, py + Math.sin(na) * len + 1.4);
-        g.lineWidth = rnd(0.45, 1.0);
+        g.lineWidth = rnd(0.35, 0.8);
         var lum = rnd(b.light - 7, b.light + 18);
         g.strokeStyle = 'hsla(' + b.hue + ',' + rnd(22, 50) + '%,' + lum + '%,' + rnd(0.5, 0.95) + ')';
         g.stroke();
@@ -499,10 +520,10 @@
   function drawGifts(g) {
     var baseY = geo.baseY + geo.maxR * 0.05;
     var spec = [
-      { dx: -0.74, w: 0.20, h: 0.15, hue: 352, sat: 66, lig: 42 },
-      { dx: 0.64, w: 0.17, h: 0.13, hue: 44, sat: 74, lig: 50 },
-      { dx: -0.38, w: 0.12, h: 0.10, hue: 156, sat: 42, lig: 36 },
-      { dx: 0.32, w: 0.14, h: 0.11, hue: 196, sat: 58, lig: 44 }
+      { dx: -0.76, w: 0.27, h: 0.20, hue: 352, sat: 66, lig: 42 },
+      { dx: 0.66, w: 0.23, h: 0.17, hue: 44, sat: 74, lig: 50 },
+      { dx: -0.40, w: 0.17, h: 0.13, hue: 156, sat: 42, lig: 36 },
+      { dx: 0.34, w: 0.19, h: 0.14, hue: 196, sat: 58, lig: 44 }
     ];
     spec.forEach(function (b) {
       var w = geo.maxR * b.w, h = geo.maxR * b.h;
