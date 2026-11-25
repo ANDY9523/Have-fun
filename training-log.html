@@ -289,7 +289,7 @@ button.last-card:active{background:var(--surface-2);border-color:var(--line-stro
 .chip-row::-webkit-scrollbar{display:none}
 .chip{
   flex:none;display:inline-flex;align-items:center;justify-content:center;gap:6px;
-  min-height:44px;padding:0 13px;
+  min-width:44px;min-height:44px;padding:0 13px;
   border:1px solid var(--line);border-radius:8px;
   background:var(--bg);color:var(--text-2);
   font-size:12.8px;font-weight:500;white-space:nowrap;
@@ -543,6 +543,10 @@ button.last-card:active{background:var(--surface-2);border-color:var(--line-stro
 /* Picker */
 .search-wrap{margin:2px 0 6px}
 .search-input{width:100%;min-height:48px;border-color:var(--line);border-radius:9px}
+.picker-groups{display:flex;flex-wrap:wrap;margin:2px 0 4px;gap:6px;padding-bottom:4px}
+.picker-groups .chip{min-height:44px;padding:0 12px;font-size:12px}
+.picker-status{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:0 2px 6px;color:var(--text-3);font-size:10.5px;line-height:1.4}
+.picker-status span:last-child{text-align:right}
 .picker-list{display:flex;flex-direction:column;margin-top:6px}
 .picker-row{
   display:flex;flex-direction:column;align-items:flex-start;justify-content:center;
@@ -969,18 +973,94 @@ body.modal-open .toast-root{top:calc(var(--safe-t) + 12px);bottom:auto}
     duration: '时长'
   };
   var WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+  var GROUP_LABELS = {
+    chest: '胸',
+    back: '背',
+    legs: '腿臀',
+    shoulders: '肩',
+    arms: '手臂',
+    core: '核心',
+    cardio: '心肺',
+    other: '其他'
+  };
+  var GROUP_ORDER = ['chest', 'back', 'legs', 'shoulders', 'arms', 'core', 'cardio', 'other'];
+  var PRESET_VERSION = 2;
+  // 预置动作按训练部位与常见程度组织。前四项保留为默认常用动作。
   var PRESETS = [
-    { id: 'ex_squat', name: '深蹲', muscle: '腿 / 臀', metric: 'weight_reps', favorite: true },
-    { id: 'ex_bench', name: '卧推', muscle: '胸', metric: 'weight_reps', favorite: true },
-    { id: 'ex_deadlift', name: '硬拉', muscle: '背 / 腿', metric: 'weight_reps', favorite: true },
-    { id: 'ex_pullup', name: '引体向上', muscle: '背', metric: 'reps', favorite: true },
-    { id: 'ex_run', name: '跑步', muscle: '心肺', metric: 'duration', favorite: false },
-    { id: 'ex_rope', name: '跳绳', muscle: '心肺', metric: 'duration', favorite: false },
-    { id: 'ex_row', name: '杠铃划船', muscle: '背', metric: 'weight_reps', favorite: false },
-    { id: 'ex_press', name: '站姿推举', muscle: '肩', metric: 'weight_reps', favorite: false },
-    { id: 'ex_plank', name: '平板支撑', muscle: '核心', metric: 'duration', favorite: false },
-    { id: 'ex_curl', name: '哑铃弯举', muscle: '手臂', metric: 'weight_reps', favorite: false }
+    { id: 'ex_squat', name: '深蹲', muscle: '股四头 / 臀', metric: 'weight_reps', group: 'legs', favorite: true },
+    { id: 'ex_bench', name: '卧推', muscle: '胸 / 三头', metric: 'weight_reps', group: 'chest', favorite: true },
+    { id: 'ex_deadlift', name: '硬拉', muscle: '背 / 腿 / 臀', metric: 'weight_reps', group: 'back', favorite: true },
+    { id: 'ex_pullup', name: '引体向上', muscle: '背阔肌 / 肱二头', metric: 'reps', group: 'back', favorite: true },
+    // 胸
+    { id: 'ex_incline_bench', name: '上斜卧推', muscle: '上胸 / 三头', metric: 'weight_reps', group: 'chest' },
+    { id: 'ex_db_bench', name: '哑铃卧推', muscle: '胸 / 三头', metric: 'weight_reps', group: 'chest' },
+    { id: 'ex_chest_press_machine', name: '器械推胸', muscle: '胸 / 三头', metric: 'weight_reps', group: 'chest' },
+    { id: 'ex_dip', name: '双杠臂屈伸', muscle: '胸下沿 / 三头', metric: 'reps', group: 'chest' },
+    { id: 'ex_pushup', name: '俯卧撑', muscle: '胸 / 三头 / 核心', metric: 'reps', group: 'chest' },
+    { id: 'ex_db_fly', name: '哑铃飞鸟', muscle: '胸', metric: 'weight_reps', group: 'chest' },
+    { id: 'ex_cable_crossover', name: '绳索夹胸', muscle: '胸内侧', metric: 'weight_reps', group: 'chest' },
+    // 背
+    { id: 'ex_row', name: '杠铃划船', muscle: '背阔肌 / 中背', metric: 'weight_reps', group: 'back' },
+    { id: 'ex_lat_pulldown', name: '高位下拉', muscle: '背阔肌', metric: 'weight_reps', group: 'back' },
+    { id: 'ex_db_row', name: '单臂哑铃划船', muscle: '背阔肌 / 中背', metric: 'weight_reps', group: 'back' },
+    { id: 'ex_seated_cable_row', name: '坐姿绳索划船', muscle: '中背 / 背阔肌', metric: 'weight_reps', group: 'back' },
+    { id: 'ex_tbar_row', name: 'T杠划船', muscle: '中背 / 背阔肌', metric: 'weight_reps', group: 'back' },
+    { id: 'ex_straight_arm_pulldown', name: '直臂下压', muscle: '背阔肌', metric: 'weight_reps', group: 'back' },
+    { id: 'ex_shrug', name: '耸肩', muscle: '斜方肌', metric: 'weight_reps', group: 'back' },
+    { id: 'ex_back_extension', name: '山羊挺身', muscle: '下背 / 臀', metric: 'reps', group: 'back' },
+    // 腿臀
+    { id: 'ex_front_squat', name: '前蹲', muscle: '股四头 / 核心', metric: 'weight_reps', group: 'legs' },
+    { id: 'ex_leg_press', name: '腿举', muscle: '股四头 / 臀', metric: 'weight_reps', group: 'legs' },
+    { id: 'ex_bulgarian_split_squat', name: '保加利亚分腿蹲', muscle: '股四头 / 臀', metric: 'weight_reps', group: 'legs' },
+    { id: 'ex_lunge', name: '箭步蹲', muscle: '股四头 / 臀', metric: 'weight_reps', group: 'legs' },
+    { id: 'ex_rdl', name: '罗马尼亚硬拉', muscle: '腘绳肌 / 臀', metric: 'weight_reps', group: 'legs' },
+    { id: 'ex_hip_thrust', name: '臀推', muscle: '臀大肌', metric: 'weight_reps', group: 'legs' },
+    { id: 'ex_leg_extension', name: '腿屈伸', muscle: '股四头', metric: 'weight_reps', group: 'legs' },
+    { id: 'ex_leg_curl', name: '腿弯举', muscle: '腘绳肌', metric: 'weight_reps', group: 'legs' },
+    { id: 'ex_calf_raise', name: '站姿提踵', muscle: '小腿', metric: 'weight_reps', group: 'legs' },
+    { id: 'ex_hip_abduction', name: '髋外展', muscle: '臀中肌', metric: 'weight_reps', group: 'legs' },
+    { id: 'ex_single_leg_rdl', name: '单腿硬拉', muscle: '腘绳肌 / 臀', metric: 'weight_reps', group: 'legs' },
+    { id: 'ex_kettlebell_swing', name: '壶铃摇摆', muscle: '臀 / 腘绳肌', metric: 'weight_reps', group: 'legs' },
+    // 肩
+    { id: 'ex_press', name: '站姿推举', muscle: '三角肌前束', metric: 'weight_reps', group: 'shoulders' },
+    { id: 'ex_db_shoulder_press', name: '哑铃肩推', muscle: '三角肌前中束', metric: 'weight_reps', group: 'shoulders' },
+    { id: 'ex_arnold_press', name: '阿诺德推举', muscle: '三角肌', metric: 'weight_reps', group: 'shoulders' },
+    { id: 'ex_lateral_raise', name: '侧平举', muscle: '三角肌中束', metric: 'weight_reps', group: 'shoulders' },
+    { id: 'ex_rear_delt_fly', name: '俯身飞鸟', muscle: '三角肌后束', metric: 'weight_reps', group: 'shoulders' },
+    { id: 'ex_face_pull', name: '面拉', muscle: '后束 / 上背', metric: 'weight_reps', group: 'shoulders' },
+    { id: 'ex_upright_row', name: '直立划船', muscle: '三角肌 / 斜方肌', metric: 'weight_reps', group: 'shoulders' },
+    // 手臂
+    { id: 'ex_curl', name: '哑铃弯举', muscle: '肱二头肌', metric: 'weight_reps', group: 'arms' },
+    { id: 'ex_barbell_curl', name: '杠铃弯举', muscle: '肱二头肌', metric: 'weight_reps', group: 'arms' },
+    { id: 'ex_hammer_curl', name: '锤式弯举', muscle: '肱肌 / 肱桡肌', metric: 'weight_reps', group: 'arms' },
+    { id: 'ex_preacher_curl', name: '牧师凳弯举', muscle: '肱二头肌', metric: 'weight_reps', group: 'arms' },
+    { id: 'ex_triceps_pushdown', name: '绳索下压', muscle: '肱三头肌', metric: 'weight_reps', group: 'arms' },
+    { id: 'ex_close_grip_bench', name: '窄距卧推', muscle: '肱三头肌 / 胸', metric: 'weight_reps', group: 'arms' },
+    { id: 'ex_skull_crusher', name: '仰卧臂屈伸', muscle: '肱三头肌', metric: 'weight_reps', group: 'arms' },
+    { id: 'ex_reverse_curl', name: '反向弯举', muscle: '前臂伸肌', metric: 'weight_reps', group: 'arms' },
+    { id: 'ex_wrist_curl', name: '腕弯举', muscle: '前臂屈肌', metric: 'weight_reps', group: 'arms' },
+    // 核心
+    { id: 'ex_plank', name: '平板支撑', muscle: '核心 / 腹横肌', metric: 'duration', group: 'core' },
+    { id: 'ex_side_plank', name: '侧平板支撑', muscle: '腹斜肌 / 核心', metric: 'duration', group: 'core' },
+    { id: 'ex_crunch', name: '卷腹', muscle: '腹直肌', metric: 'reps', group: 'core' },
+    { id: 'ex_hanging_leg_raise', name: '悬垂举腿', muscle: '下腹 / 髂腰肌', metric: 'reps', group: 'core' },
+    { id: 'ex_dead_bug', name: '死虫', muscle: '核心 / 下背', metric: 'reps', group: 'core' },
+    { id: 'ex_ab_wheel', name: '健腹轮', muscle: '核心', metric: 'reps', group: 'core' },
+    { id: 'ex_cable_crunch', name: '绳索卷腹', muscle: '腹直肌', metric: 'weight_reps', group: 'core' },
+    { id: 'ex_russian_twist', name: '俄罗斯转体', muscle: '腹斜肌', metric: 'reps', group: 'core' },
+    // 心肺
+    { id: 'ex_run', name: '跑步', muscle: '心肺 / 全身', metric: 'duration', group: 'cardio' },
+    { id: 'ex_rope', name: '跳绳', muscle: '心肺 / 小腿', metric: 'duration', group: 'cardio' },
+    { id: 'ex_rowing_machine', name: '划船机', muscle: '心肺 / 全身', metric: 'duration', group: 'cardio' },
+    { id: 'ex_cycling', name: '动感单车', muscle: '心肺 / 腿', metric: 'duration', group: 'cardio' },
+    { id: 'ex_elliptical', name: '椭圆机', muscle: '心肺', metric: 'duration', group: 'cardio' },
+    { id: 'ex_stair_climber', name: '爬楼机', muscle: '心肺 / 臀腿', metric: 'duration', group: 'cardio' },
+    { id: 'ex_swimming', name: '游泳', muscle: '心肺 / 全身', metric: 'duration', group: 'cardio' },
+    { id: 'ex_battle_ropes', name: '战绳', muscle: '心肺 / 肩', metric: 'duration', group: 'cardio' },
+    { id: 'ex_burpee', name: '波比跳', muscle: '心肺 / 全身', metric: 'reps', group: 'cardio' },
+    { id: 'ex_high_knees', name: '高抬腿', muscle: '心肺 / 核心', metric: 'duration', group: 'cardio' }
   ];
+  var PRESET_IDS = new Set(PRESETS.map(function (preset) { return preset.id; }));
 
   var nfInt = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 0 });
   var nfWeight = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 });
@@ -1013,6 +1093,7 @@ body.modal-open .toast-root{top:calc(var(--safe-t) + 12px);bottom:auto}
     statsPeriod: 'week',
     exerciseFilter: 'all',
     pickerQuery: '',
+    pickerGroup: 'all',
     sheet: null,
     dialog: null,
     focusSheet: false,
@@ -1392,6 +1473,24 @@ body.modal-open .toast-root{top:calc(var(--safe-t) + 12px);bottom:auto}
   function metricOf(ex) {
     return ex && METRICS[ex.metric] ? ex.metric : 'weight_reps';
   }
+  function guessExerciseGroup(muscle) {
+    var text = String(muscle || '');
+    if (/胸/.test(text)) return 'chest';
+    if (/背|斜方|竖脊/.test(text)) return 'back';
+    if (/腿|股四|腘绳|臀|小腿|髋/.test(text)) return 'legs';
+    if (/肩|三角|后束/.test(text)) return 'shoulders';
+    if (/臂|肱|二头|三头|前臂/.test(text)) return 'arms';
+    if (/核心|腹|腰/.test(text)) return 'core';
+    if (/心肺|有氧/.test(text)) return 'cardio';
+    return 'other';
+  }
+  function exerciseGroup(ex) {
+    if (ex && ex.group && GROUP_LABELS[ex.group]) return ex.group;
+    return guessExerciseGroup(ex ? ex.muscle : '');
+  }
+  function groupLabel(group) {
+    return GROUP_LABELS[group] || GROUP_LABELS.other;
+  }
   function volumeOfSet(set) {
     var weight = Number(set.weight);
     var reps = Number(set.reps);
@@ -1631,16 +1730,22 @@ body.modal-open .toast-root{top:calc(var(--safe-t) + 12px);bottom:auto}
         state.settings.restSec = clamp(Math.round(Number(storedSettings.restSec)), 15, 900);
       }
 
+      var prepare;
       if (!state.exercises.length && !seeded) {
-        return seedPresets().then(function (seededExercises) {
+        prepare = seedPresets().then(function (seededExercises) {
           state.exercises = seededExercises;
-          return { storedUi: storedUi, storedRest: storedRest };
         });
+      } else {
+        prepare = Promise.resolve();
       }
       if (state.exercises.length && !seeded) {
         metaSet('seeded', true).catch(function () { /* non-critical */ });
       }
-      return { storedUi: storedUi, storedRest: storedRest };
+      return prepare.then(function () {
+        return syncPresetLibrary();
+      }).then(function () {
+        return { storedUi: storedUi, storedRest: storedRest };
+      });
     }).then(function (ctx) {
       ui.currentExerciseId = ctx.storedUi && ctx.storedUi.currentExerciseId
         ? ctx.storedUi.currentExerciseId
@@ -1659,26 +1764,62 @@ body.modal-open .toast-root{top:calc(var(--safe-t) + 12px);bottom:auto}
     });
   }
 
+  function buildPresetExercise(preset, index, existing, base) {
+    return {
+      id: preset.id,
+      name: preset.name,
+      muscle: preset.muscle,
+      metric: preset.metric,
+      group: preset.group,
+      builtin: true,
+      favorite: existing ? !!existing.favorite : !!preset.favorite,
+      archived: existing ? !!existing.archived : false,
+      order: index + 1,
+      createdAt: existing && validTimestamp(existing.createdAt) ? existing.createdAt : base + index
+    };
+  }
+
+  function presetNeedsSync(oldEx, nextEx) {
+    return !oldEx ||
+      oldEx.name !== nextEx.name ||
+      oldEx.muscle !== nextEx.muscle ||
+      oldEx.metric !== nextEx.metric ||
+      oldEx.group !== nextEx.group ||
+      oldEx.builtin !== true ||
+      Number(oldEx.order) !== nextEx.order;
+  }
+
   function seedPresets() {
     var base = Date.now();
     var exercises = PRESETS.map(function (preset, index) {
-      return {
-        id: preset.id,
-        name: preset.name,
-        muscle: preset.muscle,
-        metric: preset.metric,
-        builtin: true,
-        favorite: !!preset.favorite,
-        archived: false,
-        order: index + 1,
-        createdAt: base + index
-      };
+      return buildPresetExercise(preset, index, null, base);
     });
     var ops = exercises.map(function (ex) {
       return { store: 'exercises', type: 'put', value: ex };
     });
     ops.push({ store: 'meta', type: 'put', value: { key: 'seeded', value: true } });
+    ops.push({ store: 'meta', type: 'put', value: { key: 'presetVersion', value: PRESET_VERSION } });
     return dbBatch(ops).then(function () { return exercises; });
+  }
+
+  function syncPresetLibrary() {
+    var base = Date.now();
+    var byId = new Map(state.exercises.map(function (ex) { return [ex.id, ex]; }));
+    var customs = state.exercises.filter(function (ex) { return !PRESET_IDS.has(ex.id); });
+    var nextPresets = [];
+    var ops = [];
+    PRESETS.forEach(function (preset, index) {
+      var oldEx = byId.get(preset.id) || null;
+      var nextEx = buildPresetExercise(preset, index, oldEx, base);
+      nextPresets.push(nextEx);
+      if (presetNeedsSync(oldEx, nextEx)) {
+        ops.push({ store: 'exercises', type: 'put', value: nextEx });
+      }
+    });
+    state.exercises = nextPresets.concat(customs);
+    if (!ops.length) return Promise.resolve();
+    ops.push({ store: 'meta', type: 'put', value: { key: 'presetVersion', value: PRESET_VERSION } });
+    return dbBatch(ops);
   }
 
   function restoreRest(savedRest) {
@@ -2510,14 +2651,22 @@ body.modal-open .toast-root{top:calc(var(--safe-t) + 12px);bottom:auto}
 
   function buildPickerSheet() {
     var session = activeSession();
-    var filtered = searchExercises(ui.pickerQuery);
+    var filtered = filterPickerExercises();
     var list = pickerRowsHtml(filtered);
+    var filterDefs = [{ key: 'all', label: '全部' }].concat(GROUP_ORDER.map(function (key) {
+      return { key: key, label: GROUP_LABELS[key] };
+    }));
+    var groupChips = filterDefs.map(function (def) {
+      return '<button class="chip" type="button" data-act="pickerGroup" data-group="' + def.key + '" aria-pressed="' +
+        (ui.pickerGroup === def.key ? 'true' : 'false') + '">' + esc(def.label) + '</button>';
+    }).join('');
     var body =
-      '<div class="search-wrap"><input class="search-input" id="pickerSearch" type="search" placeholder="搜索名称或肌群" autocomplete="off" value="' + escapeAttr(ui.pickerQuery) + '" aria-label="搜索动作"></div>' +
-      '<div class="picker-list" id="pickerList">' + list + '</div>' +
-      '<p class="input-hint">' + (session
-        ? '动作库和自定义动作都在这里，常用动作排在前面。选择后立即切换当前动作。'
-        : '选择动作后会直接开始一次训练。') + '</p>';
+      '<div class="search-wrap"><input class="search-input" id="pickerSearch" type="search" placeholder="搜索动作或分类" autocomplete="off" value="' + escapeAttr(ui.pickerQuery) + '" aria-label="搜索动作"></div>' +
+      '<div class="picker-groups" id="pickerGroups" role="group" aria-label="按训练部位筛选">' + groupChips + '</div>' +
+      '<div class="picker-status"><span id="pickerCount">' + filtered.length + ' 个动作</span>' +
+        (session ? '<span>选择后切换当前动作</span>' : '') +
+      '</div>' +
+      '<div class="picker-list" id="pickerList">' + list + '</div>';
     var foot = '<button class="btn btn-outline" type="button" data-act="addExerciseFromPicker">新建动作</button>';
     return sheetMarkup(
       '选择动作',
@@ -2527,19 +2676,38 @@ body.modal-open .toast-root{top:calc(var(--safe-t) + 12px);bottom:auto}
     );
   }
 
-  function searchExercises(query) {
-    var q = String(query || '').trim().toLowerCase();
-    var all = activeExercises();
-    if (!q) return all;
-    return all.filter(function (ex) {
-      return String(ex.name).toLowerCase().indexOf(q) !== -1 ||
-        String(ex.muscle || '').toLowerCase().indexOf(q) !== -1;
+  function filterPickerExercises() {
+    var q = String(ui.pickerQuery || '').trim().toLowerCase();
+    var group = ui.pickerGroup || 'all';
+    return activeExercises().filter(function (ex) {
+      if (group !== 'all' && exerciseGroup(ex) !== group) return false;
+      if (!q) return true;
+      var haystack = String(ex.name || '') + ' ' + String(ex.muscle || '') + ' ' + groupLabel(exerciseGroup(ex));
+      return haystack.toLowerCase().indexOf(q) !== -1;
     });
+  }
+
+  function refreshPickerList() {
+    if (!ui.sheet || ui.sheet.type !== 'picker') return;
+    var results = filterPickerExercises();
+    var list = document.getElementById('pickerList');
+    if (list) list.innerHTML = pickerRowsHtml(results);
+    var count = document.getElementById('pickerCount');
+    if (count) count.textContent = results.length + ' 个动作';
+    $$('#pickerGroups [data-act="pickerGroup"]').forEach(function (button) {
+      button.setAttribute('aria-pressed', button.dataset.group === ui.pickerGroup ? 'true' : 'false');
+    });
+  }
+
+  function setPickerGroup(group) {
+    if (group !== 'all' && !GROUP_LABELS[group]) return;
+    ui.pickerGroup = group;
+    refreshPickerList();
   }
 
   function pickerRowsHtml(list) {
     if (!list.length) {
-      return '<div class="list-empty">没有匹配的动作。可以清空搜索，或新建一个动作。</div>';
+      return '<div class="list-empty">没有匹配的动作。换个关键词或分类，或新建一个动作。</div>';
     }
     return list.map(function (ex) {
       var last = lastCompletedSet(ex.id);
@@ -3534,6 +3702,7 @@ body.modal-open .toast-root{top:calc(var(--safe-t) + 12px);bottom:auto}
       returnSheet: returnSheet
     };
     ui.pickerQuery = '';
+    ui.pickerGroup = 'all';
     ui.focusSheet = true;
     renderAll();
   }
@@ -3997,11 +4166,14 @@ body.modal-open .toast-root{top:calc(var(--safe-t) + 12px);bottom:auto}
       usedExercises.add(id);
       if (oldId && !exerciseMap.has(oldId)) exerciseMap.set(oldId, id);
       var metric = METRICS[item.metric] ? item.metric : 'weight_reps';
+      var muscle = sanitizeText(item.muscle, 30) || '未分类';
+      var group = GROUP_LABELS[item.group] ? item.group : guessExerciseGroup(muscle);
       exercises.push({
         id: id,
         name: name,
-        muscle: sanitizeText(item.muscle, 30) || '未分类',
+        muscle: muscle,
         metric: metric,
+        group: group,
         builtin: item.builtin === true,
         favorite: item.favorite === true,
         archived: item.archived === true,
@@ -4142,6 +4314,7 @@ body.modal-open .toast-root{top:calc(var(--safe-t) + 12px);bottom:auto}
     normalized.sessions.forEach(function (s) { ops.push({ store: 'sessions', type: 'put', value: s }); });
     normalized.sets.forEach(function (set) { ops.push({ store: 'sets', type: 'put', value: set }); });
     ops.push({ store: 'meta', type: 'put', value: { key: 'seeded', value: true } });
+    ops.push({ store: 'meta', type: 'put', value: { key: 'presetVersion', value: PRESET_VERSION } });
     ops.push({ store: 'meta', type: 'put', value: { key: 'settings', value: normalized.settings } });
 
     return dbBatch(ops).then(function () {
@@ -4149,6 +4322,8 @@ body.modal-open .toast-root{top:calc(var(--safe-t) + 12px);bottom:auto}
       state.sessions = normalized.sessions;
       state.sets = normalized.sets;
       state.settings = Object.assign({}, normalized.settings);
+      return syncPresetLibrary();
+    }).then(function () {
       rest = null;
       ui.sheet = null;
       ui.focusSheet = false;
@@ -4157,6 +4332,7 @@ body.modal-open .toast-root{top:calc(var(--safe-t) + 12px);bottom:auto}
       ui.historyExpanded.clear();
       ui.exerciseFilter = 'all';
       ui.pickerQuery = '';
+      ui.pickerGroup = 'all';
       ui.currentExerciseId = chooseValidExerciseId(null);
       renderAll();
       toast('导入完成 · ' + normalized.sessions.length + ' 次训练 / ' + normalized.sets.length + ' 组');
@@ -4567,6 +4743,9 @@ body.modal-open .toast-root{top:calc(var(--safe-t) + 12px);bottom:auto}
         return;
       case 'chooseExercise':
         return chooseExercise(data.id);
+      case 'pickerGroup':
+        setPickerGroup(data.group);
+        return;
       case 'requestNotify':
         return requestNotificationPermission();
       case 'exportData':
@@ -4734,8 +4913,7 @@ body.modal-open .toast-root{top:calc(var(--safe-t) + 12px);bottom:auto}
     if (!(target instanceof HTMLElement)) return;
     if (target.id === 'pickerSearch') {
       ui.pickerQuery = target.value;
-      var list = document.getElementById('pickerList');
-      if (list) list.innerHTML = pickerRowsHtml(searchExercises(ui.pickerQuery));
+      refreshPickerList();
       return;
     }
     if (!ui.sheet || ui.sheet.type !== 'record') return;
