@@ -60,6 +60,20 @@
   }
   .picked.has-result .desc { color: #c4ceda; }
 
+  .filters { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 6px; padding: 0 14px 8px; }
+  .filters.locked { pointer-events: none; opacity: .55; }
+  .filter-btn {
+    min-height: 38px; padding: 0 12px; border-radius: 999px;
+    border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.05);
+    color: #aeb8c7; font-size: 12px; font-weight: 650; font-family: inherit; cursor: pointer;
+    transition: background-color .16s ease, border-color .16s ease, color .16s ease, transform .08s ease;
+  }
+  .filter-btn:active { transform: scale(.96); }
+  .filter-btn[aria-pressed="true"] {
+    color: #fff; border-color: rgba(255,91,110,.68);
+    background: rgba(255,91,110,.16);
+    box-shadow: inset 0 0 0 1px rgba(255,91,110,.08);
+  }
   main { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 0 12px 6px; }
   #stage { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
   #wheel { display: block; border-radius: 50%; box-shadow: 0 18px 50px rgba(0,0,0,.55), 0 0 0 8px rgba(255,255,255,.04); touch-action: none; }
@@ -131,7 +145,7 @@
 <header>
   <div class="brand">
     <h1>无畏契约 · 玩法转盘</h1>
-    <div class="sub">共 <b id="count">66</b> 条玩法 · 等概率 · 转到哪条打哪条</div>
+    <div class="sub">共 <b id="count">129</b> 条玩法 · <span id="filterName">全部</span> · 等概率</div>
   </div>
   <button class="icon-btn" id="editBtn">编辑</button>
 </header>
@@ -141,8 +155,10 @@
     <span class="tag" id="pTag">待抽取</span>
     <span class="name" id="pName">点中间的「转」开始</span>
   </div>
-  <p class="desc" id="pDesc">66 条玩法等概率抽取，转到哪条这把就执行哪条。想改规则点右上角「编辑」。</p>
+  <p class="desc" id="pDesc">选个分类或直接抽；转到哪条这把就执行哪条。想改规则点右上角「编辑」。</p>
 </section>
+
+<div class="filters" id="filters" role="group" aria-label="玩法分类"></div>
 
 <main>
   <div id="stage">
@@ -166,7 +182,7 @@
       <button id="addBtn">+ 添加一条</button>
       <button id="exportBtn">导出 JSON</button>
       <button id="importBtn">导入 JSON</button>
-      <button class="danger" id="resetBtn">恢复默认 66 条</button>
+      <button class="danger" id="resetBtn">恢复默认 129 条</button>
       <input type="file" id="fileInput" accept=".json,application/json" hidden>
     </div>
   </div>
@@ -177,7 +193,7 @@
 (function () {
   'use strict';
 
-  // ============ 默认 66 条玩法 ============
+  // ============ 默认 129 条玩法 ============
   var DEFAULT_RULES = [
     // 枪械 · 经济
     { n: '暴徒信徒', c: '枪械', d: '整局只认暴徒（Vandal）。地上躺着的幻影、大狙一概不碰，手滑买错就当场丢给队友，下一回合换回来。' },
@@ -255,15 +271,93 @@
     { n: '问号惩罚', c: '惩罚', d: '每次死亡聊天框打一个「？」，打别的算违规。' },
     { n: '被爆头要道歉', c: '惩罚', d: '被爆头说「再来一次」，不说别复活。' },
     { n: '统一口头禅', c: '惩罚', d: '全队定一句口头禅，关键时刻忘了请喝水。' },
-    { n: '自由发挥', c: '搞怪', d: '当前回合 MVP 现场定一条新规则，打到结束都得遵守。' }
+    { n: '自由发挥', c: '搞怪', d: '当前回合 MVP 现场定一条新规则，打到结束都得遵守。' },
+
+    // 枪械
+    { n: '大狙专场', c: '枪械', d: '除手枪局外只买 Operator（大狙）。开镜一枪不中立刻换点，别在原地补第二枪；钱不够就硬存，不许换其他长枪。' },
+    { n: '神射手', c: '枪械', d: '主武器只用 Guardian 或 Marshal，禁止 Vandal、Phantom 和 Operator。每一枪都要先预瞄再开，打不中就是自己的问题。' },
+    { n: '手枪三选一', c: '枪械', d: '手枪局只能在 Ghost、Sheriff、Frenzy 里选一把，选定后整局不换；其他钱留给下一回合，别乱买。' },
+    { n: '副武器禁令', c: '枪械', d: '主武器子弹打空后不许切手枪，必须换弹或退回掩体；手枪只能在手枪局和主武器没买到的回合使用。' },
+    { n: '近战收尾', c: '枪械', d: '每回合最后一个敌人必须用刀收掉。最后一个人被枪打死，这回合挑战失败：下回合全队只买手枪。' },
+    { n: '换枪接力', c: '枪械', d: '每回合开始和一名队友交换主武器，整局不许换回来；主武器掉了就捡队友的，别去捡自己的旧枪。' },
+    { n: '贴脸执法', c: '枪械', d: '只买 Shorty、Bucky 或 Judge，必须贴到近身距离才准开枪；在中远距离被对死也算违规，下回合先静步绕后。' },
+    { n: '单点模式', c: '枪械', d: '所有枪都只许单发点射，禁止按住扫射；Vandal、Phantom 也要一枪一枪点，打连发算白练。' },
+    { n: '全程腰射', c: '枪械', d: '整局不许长时间开镜，只准腰射或瞬镜；开镜超过一秒就算违规，罚报一次点。大狙也只能瞬镜或腰射。' },
+    // 经济
+    { n: '穷鬼挑战', c: '经济', d: '前 5 回合只买 Classic 和轻甲，第 6 回合起才许升级装备；谁先偷偷起大枪，谁请全队喝水。' },
+    { n: '统一预算', c: '经济', d: '每回合全队消费差不能超过 500。花多了就把差额买枪丢给花得最少的队友；买不了就下回合补。' },
+    { n: '不捡枪', c: '经济', d: '整局不捡地上的敌方武器，只用自己买的枪和手枪；主武器打空就切手枪撑完，别当拾荒者。' },
+    { n: '手枪局裸奔', c: '经济', d: '手枪局不买任何枪，只用默认 Classic。省下的钱第二回合直接起，谁先买枪谁算违规。' },
+    { n: '技能限额', c: '经济', d: '每回合最多买两个技能，剩下的钱必须留给下回合或队友；技能买满一次，下回合只许买轻甲。' },
+    { n: '大富翁税', c: '经济', d: '队伍总资金超过 20000 时全员必须满枪满技能，禁止存钱。谁存钱，谁下一回合只买手枪。' },
+    // 走位
+    { n: '移动对枪', c: '走位', d: '每次开枪前必须先左右横移一次，站桩开枪算违规。被抓到就原地报一次点，再继续打。' },
+    { n: '不切刀', c: '走位', d: '赶路不许切刀加速，全程用枪移动；切一次刀就复读一句「我急了」，再继续走。' },
+    { n: '不走回头路', c: '走位', d: '每回合选一条路线，走过之后不许原路返回；换点必须绕路。被队友发现走回头路，就报一次假点。' },
+    { n: '烟雾潜行', c: '走位', d: '进烟必须蹲走，出烟前不许站起来；在烟里站直就算给对面送头，自己承认。' },
+    { n: '跳跃进点', c: '走位', d: '每次进包点都要跳进去；脚先落地没跳的，退出去重新进，哪怕对面已经在架枪。' },
+    { n: '流动防守', c: '走位', d: '防守每回合必须换一个站位，不许连续两回合守同一个角落；被对手抓到同一个点就认。' },
+    { n: '跟进三秒', c: '走位', d: '突破手进点后，其他人必须默数三秒再跟进；抢先进点算抢戏，下回合最后一名跟进的人先走。' },
+    { n: '一枪一停', c: '走位', d: '每打出一枪必须停半秒，才能移动或开下一枪；把步枪当连狙用，连点太快就算违规。' },
+    { n: '蛇形转点', c: '走位', d: '转点时只能左右摆动前进，直线跑图算违规；被队友抓到就报一次假点，让全队判断一次真假。' },
+    // 技能
+    { n: '全员决斗', c: '技能', d: '全队只选决斗者，没有烟也没有闪，进点全靠个人能力和枪法；阵容不够就补到五个决斗者。' },
+    { n: '全员先锋', c: '技能', d: '全队只选先锋，进点前必须先把信息技能交干净；没人探路就不许推进，探到人再打。' },
+    { n: '全员哨卫', c: '技能', d: '全队只选哨卫，守点靠道具和交叉火力，禁止主动前压；谁先冲出去谁负责收尸。' },
+    { n: '全员控场', c: '技能', d: '全队只选控场，用烟和墙把地图切碎；没有烟就不进点，技能没放完不许开团。' },
+    { n: '无大招', c: '技能', d: '整局不放大招，大招键当坏了；放一次，下回合全队只买手枪，并且不许抱怨。' },
+    { n: '无技能局', c: '技能', d: '整局不主动使用任何技能（包括大招），只靠枪法和走位；误触技能就原地蹲下三秒。' },
+    { n: '技能顺序', c: '技能', d: '每回合按 Q → E → C → X 的顺序放技能，不能跳着放；没有的技能可以跳过，顺序乱了就重来一遍。' },
+    { n: '单技能锁', c: '技能', d: '开局选定一个基础技能，整局只能用这一个，其他两个键禁用；大招只能在 1v1 或 1v2 残局放。' },
+    { n: '双闪进点', c: '技能', d: '每回合进点前必须交两颗闪光；阵容没闪就用两颗烟代替。交不出来，全队原地等 10 秒再进。' },
+    // 团队
+    { n: '称呼特工', c: '团队', d: '全程用特工代号互相称呼；叫真名或外号一次，下回合必须用全称报点。' },
+    { n: '报点带数', c: '团队', d: '每次报点必须带人数，比如「B 两个」；只说「有人」不算有效报点，要被队友复读纠正。' },
+    { n: '单人指挥', c: '团队', d: '只有指挥能开口，其他四人只能打字或标记；指挥阵亡也不换人，听他留下的最后一句话。' },
+    { n: '死亡闭麦', c: '团队', d: '阵亡后立刻闭麦，不许报点，也不许叹气；想继续指挥就先活着。' },
+    { n: '禁止叹气', c: '团队', d: '全程不许叹气、啧嘴或说「没了」；每发泄一次，立刻夸队友一句，声音要让全队听见。' },
+    // 节奏
+    { n: '快攻三回合', c: '节奏', d: '每三回合必须打一次快攻，20 秒内全员进点；不进点算这回合挑战失败，下回合继续快攻。' },
+    { n: '固定包点', c: '节奏', d: '整局进攻只打同一个包点，防守也只守对应区域；不转点、不 split，打不下也继续头铁。' },
+    { n: '劣势收缩', c: '节奏', d: '队友先掉人后全队回防守点，10 秒内不许主动前压；谁追出去谁请喝水，并且下回合最后进场。' },
+    { n: '指定背包', c: '节奏', d: '全队指定一名背包人，必须由他带包；背包人死了由离包最近的人接包，其他人不能主动拿包。' },
+    { n: '极限拆包', c: '节奏', d: '防守方只许在最后 15 秒开始拆包；提前蹲下拆包就主动松手，重新等到最后 15 秒再拆。' },
+    // 赛制
+    { n: '1v1 单挑', c: '赛制', d: '自定义房 1v1，固定一张图，先到 5 回合或 5 杀，输的人换边；练枪也练心态，不许换特工。' },
+    { n: '刀战局', c: '赛制', d: '只许买刀或默认刀，禁用枪械和主动技能；先拿到 10 次击杀的一方赢，不能蹲点躲一整局。' },
+    { n: '手枪对决', c: '赛制', d: '整场只用手枪和轻甲，禁用长枪；先到 13 回合。手枪局结束后也不许升级主武器。' },
+    { n: '狙击对决', c: '赛制', d: '双方只买 Operator 或 Marshal，1v1 或 2v2，先到 7 分；空枪必须报「空」，让对手知道你没子弹。' },
+    { n: '随机特工', c: '赛制', d: '开局用随机工具给每个人分配特工，不许重摇；抽到什么打什么，阵容再怪也要打完。' },
+    { n: '镜像阵容', c: '赛制', d: '双方选完全相同的五个特工，比谁的同一套技能用得好；谁先换角色谁请喝水。' },
+    { n: '猎杀时刻', c: '赛制', d: '随机一人当猎人，只用 Sheriff，其余四人只拿刀躲。猎人每击杀一人加 30 秒，时间到换猎人。' },
+    { n: '捉迷藏', c: '赛制', d: '守方只拿刀藏进指定区域，攻方 30 秒后进图搜人；抓完所有藏者换边，藏者不许出区域。' },
+    { n: '让枪局', c: '赛制', d: '段位高的人只用手枪或刀，段位低的人自由起枪；赢的人下回合继续让，直到输一回合为止。' },
+    // 训练
+    { n: '爆头线练习', c: '训练', d: '10 分钟死斗或靶场，只允许爆头击杀；身体击杀不算成绩，练的是准星高度和预瞄。' },
+    { n: '急停训练', c: '训练', d: '靶场或死斗 10 分钟，每次开枪前必须先急停；移动中开枪的弹道不算，重来一次。' },
+    { n: '转身一枪', c: '训练', d: '靶场设置背对目标，听声或标记后 180 度转身一枪；每组 20 次，记录命中率后再加难度。' },
+    { n: '预瞄清点', c: '训练', d: '选一张图，只走预瞄线清点、不开枪；每回合换一条路线，练完再打一场死斗检验。' },
+    { n: '道具点位课', c: '训练', d: '选 5 个常用道具点位，每个点连续成功 3 次才算过；练烟、闪、燃烧弹都行，不许糊弄自己。' },
+    { n: '靶场百杀', c: '训练', d: '靶场连打 100 个机器人，只用同一把枪；记录用时，下一次必须更快，慢了就重来。' },
+    { n: '死斗三连', c: '训练', d: '连打三场死斗，每场只玩一把指定枪，每场至少 10 杀；完成后再换下一把，别中途换。' },
+    // 惩罚
+    { n: '死亡点歌', c: '惩罚', d: '每次阵亡让队友点一首歌的副歌，你必须唱一句；不唱，下回合只用手枪。' },
+    { n: '白给罚款', c: '惩罚', d: '每回合 0 伤害阵亡，下一回合给队里经济最低的人买一把手枪；买不起就只买轻甲。' },
+    // 搞怪
+    { n: '反着报点', c: '搞怪', d: '整局把 A/B 互换报点，实际去 A 要喊 B；队友必须自动翻译，报错一次罚一句「收到」。' },
+    { n: '特工口吻', c: '搞怪', d: '全程用特工身份说话，比如「猎枭已就位」「贤者需要能量」；出戏一次，下回合用第三人称报点。' },
   ];
 
-  var LS_KEY = 'valorant.wheel.rules.v2';
+  var LS_KEY = 'valorant.wheel.rules.v3';
+  var LEGACY_LS_KEY = 'valorant.wheel.rules.v2';
+  var CATEGORY_ORDER = ['枪械', '经济', '走位', '技能', '团队', '节奏', '赛制', '训练', '惩罚', '搞怪'];
   var PALETTE = ['#ffb3c7', '#ff8e6e', '#ffe45c', '#7be8e0', '#ff9be0'];
 
   var rules = loadRules();
   var rotation = -Math.PI / 2;
   var spinning = false;
+  var activeCategory = 'all';
+  var filterButtons = [];
 
   var canvas = document.getElementById('wheel');
   var ctx = canvas.getContext('2d');
@@ -276,20 +370,130 @@
   var pTag = document.getElementById('pTag');
   var pName = document.getElementById('pName');
   var pDesc = document.getElementById('pDesc');
+  var filtersEl = document.getElementById('filters');
+  var filterNameEl = document.getElementById('filterName');
+  var resetBtn = document.getElementById('resetBtn');
 
+  function normalizeRules(arr) {
+    return arr.map(function (r) {
+      return { n: String(r && r.n || '未命名'), d: String(r && r.d || ''), c: String(r && r.c || '自定义') };
+    });
+  }
+  function mergeRules(existing, defaults) {
+    var seen = {};
+    var out = [];
+    normalizeRules(existing).forEach(function (r) {
+      var key = r.n.trim().toLowerCase();
+      if (!key || seen[key]) return;
+      seen[key] = true;
+      out.push(r);
+    });
+    defaults.forEach(function (r) {
+      var key = String(r.n).trim().toLowerCase();
+      if (!key || seen[key]) return;
+      seen[key] = true;
+      out.push({ n: r.n, d: r.d, c: r.c });
+    });
+    return out;
+  }
   function loadRules() {
     try {
       var raw = localStorage.getItem(LS_KEY);
-      if (!raw) return clone(DEFAULT_RULES);
-      var arr = JSON.parse(raw);
-      if (!Array.isArray(arr) || !arr.length) return clone(DEFAULT_RULES);
-      return arr.map(function (r) {
-        return { n: String(r && r.n || '未命名'), d: String(r && r.d || ''), c: String(r && r.c || '自定义') };
-      });
-    } catch (e) { return clone(DEFAULT_RULES); }
+      if (raw) {
+        var arr = JSON.parse(raw);
+        if (Array.isArray(arr) && arr.length) return normalizeRules(arr);
+      }
+      var legacyRaw = localStorage.getItem(LEGACY_LS_KEY);
+      if (legacyRaw) {
+        var legacy = JSON.parse(legacyRaw);
+        if (Array.isArray(legacy) && legacy.length) {
+          var merged = mergeRules(legacy, DEFAULT_RULES);
+          try { localStorage.setItem(LS_KEY, JSON.stringify(merged)); } catch (e) {}
+          return merged;
+        }
+      }
+    } catch (e) {}
+    return clone(DEFAULT_RULES);
   }
   function clone(arr) { return arr.map(function (r) { return { n: r.n, d: r.d, c: r.c }; }); }
   function saveRules() { try { localStorage.setItem(LS_KEY, JSON.stringify(rules)); } catch (e) {} }
+
+  function getCategories() {
+    var present = {};
+    rules.forEach(function (r) { present[r.c || '自定义'] = true; });
+    var ordered = CATEGORY_ORDER.filter(function (c) { return present[c]; });
+    Object.keys(present).forEach(function (c) {
+      if (CATEGORY_ORDER.indexOf(c) === -1) ordered.push(c);
+    });
+    return ordered;
+  }
+
+  function visibleRules() {
+    if (activeCategory === 'all') return rules;
+    return rules.filter(function (r) { return (r.c || '自定义') === activeCategory; });
+  }
+
+  function updateScope() {
+    var active = visibleRules();
+    countEl.textContent = active.length;
+    filterNameEl.textContent = activeCategory === 'all' ? '全部' : activeCategory;
+  }
+
+  function renderFilters() {
+    var categories = getCategories();
+    if (activeCategory !== 'all' && categories.indexOf(activeCategory) === -1) activeCategory = 'all';
+    filterButtons = [];
+    filtersEl.innerHTML = '';
+    ['all'].concat(categories).forEach(function (key) {
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'filter-btn';
+      button.textContent = key === 'all' ? '全部' : key;
+      button.setAttribute('aria-pressed', activeCategory === key ? 'true' : 'false');
+      button.addEventListener('click', function () { setCategory(key); });
+      filtersEl.appendChild(button);
+      filterButtons.push({ key: key, el: button });
+    });
+    updateScope();
+  }
+
+  function updateFilterPressed() {
+    filterButtons.forEach(function (item) {
+      item.el.setAttribute('aria-pressed', item.key === activeCategory ? 'true' : 'false');
+    });
+  }
+
+  function setCategory(key) {
+    if (spinning) return;
+    if (key !== 'all' && getCategories().indexOf(key) === -1) key = 'all';
+    if (key === activeCategory) return;
+    activeCategory = key;
+    updateFilterPressed();
+    updateScope();
+    resetPickedPrompt();
+    draw();
+  }
+
+  function resetPickedPrompt() {
+    if (spinning) return;
+    picked.classList.remove('has-result', 'spinning');
+    pTag.textContent = '待抽取';
+    pName.textContent = '点中间的「转」开始';
+    var active = visibleRules();
+    if (activeCategory === 'all') {
+      pDesc.textContent = '共 ' + active.length + ' 条玩法。全部模式不显示轮盘文字；选分类可看清名称，转到哪条就执行哪条。';
+    } else {
+      pDesc.textContent = '当前分类「' + activeCategory + '」共 ' + active.length + ' 条。转到哪条这把就执行哪条。';
+    }
+  }
+
+  function refreshAfterRulesChange() {
+    if (activeCategory !== 'all' && getCategories().indexOf(activeCategory) === -1) activeCategory = 'all';
+    renderFilters();
+    resetPickedPrompt();
+    draw();
+  }
+
 
   var sizePx = 0;
 
@@ -311,7 +515,8 @@
   }
 
   function draw() {
-    var N = rules.length, S = sizePx, cx = S / 2, cy = S / 2, R = S / 2 - 2, inner = R * 0.255;
+    var active = visibleRules();
+    var N = active.length, S = sizePx, cx = S / 2, cy = S / 2, R = S / 2 - 2, inner = R * 0.255;
     ctx.clearRect(0, 0, S, S);
     if (!N) {
       ctx.fillStyle = '#1a2130';
@@ -332,27 +537,29 @@
       ctx.closePath();
       ctx.fillStyle = PALETTE[i % PALETTE.length];
       ctx.fill();
+
+      // 数量太多时不再绘制文字，避免轮盘变成一团小字；选分类后会重新显示。
       if (N <= 90) {
         ctx.strokeStyle = 'rgba(255,255,255,.55)';
         ctx.lineWidth = N > 40 ? 0.8 : 1.2;
         ctx.stroke();
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(a0 + step / 2);
+        var arcW = (Math.PI * 2 * R * 0.72) / N;
+        var fs = Math.min(19, Math.max(8, arcW * 0.85));
+        ctx.font = '800 ' + fs.toFixed(1) + 'px -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,.97)';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        ctx.shadowColor = 'rgba(0,0,0,.28)';
+        ctx.shadowBlur = 3;
+        var text = active[i].n, maxLen = R * 0.52;
+        while (ctx.measureText(text).width > maxLen && text.length > 1) text = text.slice(0, -1);
+        if (text !== active[i].n) text += '…';
+        ctx.fillText(text, R * 0.94, 0);
+        ctx.restore();
       }
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.rotate(a0 + step / 2);
-      var arcW = (Math.PI * 2 * R * 0.72) / N;
-      var fs = Math.min(19, Math.max(8, arcW * 0.85));
-      ctx.font = '800 ' + fs.toFixed(1) + 'px -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif';
-      ctx.fillStyle = 'rgba(255,255,255,.97)';
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'middle';
-      ctx.shadowColor = 'rgba(0,0,0,.28)';
-      ctx.shadowBlur = 3;
-      var text = rules[i].n, maxLen = R * 0.52;
-      while (ctx.measureText(text).width > maxLen && text.length > 1) text = text.slice(0, -1);
-      if (text !== rules[i].n) text += '…';
-      ctx.fillText(text, R * 0.94, 0);
-      ctx.restore();
     }
 
     ctx.beginPath(); ctx.arc(cx, cy, inner * 1.02, 0, Math.PI * 2);
@@ -365,18 +572,21 @@
   }
 
   function spin() {
-    if (spinning || !rules.length) return;
+    var active = visibleRules();
+    if (spinning || !active.length) return;
     spinning = true;
     spinBtn.disabled = true;
     spinBtn.textContent = '…';
+    filtersEl.classList.add('locked');
     picked.classList.remove('has-result');
     picked.classList.add('spinning');
     pTag.textContent = '转动中';
     pName.textContent = '看看这把要干嘛…';
     pDesc.textContent = '别急，马上出结果。';
 
-    var N = rules.length, step = Math.PI * 2 / N;
+    var N = active.length, step = Math.PI * 2 / N;
     var idx = Math.floor(Math.random() * N);
+    var chosen = active[idx];
     var target = -Math.PI / 2 - (idx + 0.5) * step + (Math.random() - 0.5) * step * 0.55;
     var start = rotation;
     var delta = ((target - start) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
@@ -397,14 +607,15 @@
         spinning = false;
         spinBtn.disabled = false;
         spinBtn.textContent = '转';
-        showResult(idx);
+        filtersEl.classList.remove('locked');
+        showResult(chosen);
       }
     }
     requestAnimationFrame(frame);
   }
 
-  function showResult(i) {
-    var r = rules[i];
+  function showResult(rule) {
+    var r = rule;
     if (!r) return;
     picked.classList.remove('spinning');
     picked.classList.add('has-result');
@@ -415,7 +626,6 @@
   }
 
   function renderList() {
-    countEl.textContent = rules.length;
     listEl.innerHTML = '';
     if (!rules.length) {
       listEl.innerHTML = '<div class="empty">列表是空的，点上方「+ 添加一条」开始。</div>';
@@ -457,7 +667,7 @@
       del.title = '删除';
       del.addEventListener('click', function () {
         rules.splice(i, 1);
-        saveRules(); renderList(); draw();
+        saveRules(); renderList(); refreshAfterRulesChange();
       });
 
       row.appendChild(idx);
@@ -475,16 +685,18 @@
 
   document.getElementById('addBtn').addEventListener('click', function () {
     rules.push({ n: '新玩法 ' + (rules.length + 1), d: '', c: '自定义' });
-    saveRules(); renderList(); draw();
+    activeCategory = 'all';
+    saveRules(); renderList(); refreshAfterRulesChange();
     listEl.scrollTop = listEl.scrollHeight;
     var inputs = listEl.querySelectorAll('.item input');
     if (inputs.length) inputs[inputs.length - 2].focus();
   });
 
-  document.getElementById('resetBtn').addEventListener('click', function () {
-    if (!confirm('恢复成默认的 66 条玩法？你改过的内容会被覆盖。')) return;
+  resetBtn.addEventListener('click', function () {
+    if (!confirm('恢复成默认的 ' + DEFAULT_RULES.length + ' 条玩法？你改过的内容会被覆盖。')) return;
     rules = clone(DEFAULT_RULES);
-    saveRules(); renderList(); layout();
+    activeCategory = 'all';
+    saveRules(); renderList(); refreshAfterRulesChange(); layout();
   });
 
   document.getElementById('exportBtn').addEventListener('click', function () {
@@ -506,10 +718,9 @@
       try {
         var arr = JSON.parse(String(fr.result));
         if (!Array.isArray(arr) || !arr.length) throw new Error('bad');
-        rules = arr.map(function (r) {
-          return { n: String(r.n || '未命名'), d: String(r.d || ''), c: String(r.c || '自定义') };
-        });
-        saveRules(); renderList(); layout();
+        rules = normalizeRules(arr);
+        activeCategory = 'all';
+        saveRules(); renderList(); refreshAfterRulesChange(); layout();
       } catch (e) { alert('导入失败：需要一个包含 name / desc 的 JSON 数组'); }
       fileInput.value = '';
     };
@@ -528,11 +739,16 @@
   window.addEventListener('resize', layout);
   window.addEventListener('orientationchange', function () { setTimeout(layout, 250); });
 
-  countEl.textContent = rules.length;
+  resetBtn.textContent = '恢复默认 ' + DEFAULT_RULES.length + ' 条';
+  renderFilters();
+  resetPickedPrompt();
   layout();
 
-  // 调试：地址后加 #result 直接展示第 4 条，加 #spin 自动转
-  if (location.hash === '#result') setTimeout(function () { showResult(3); }, 200);
+  // 调试：地址后加 #result 直接展示当前分类第 4 条，加 #spin 自动转
+  if (location.hash === '#result') setTimeout(function () {
+    var active = visibleRules();
+    showResult(active[3] || active[0]);
+  }, 200);
   if (location.hash === '#spin') setTimeout(spin, 300);
   if (location.hash === '#measure') setTimeout(function () {
     document.title = 'M ' + innerWidth + 'x' + innerHeight + ' stage ' + stage.clientWidth + 'x' + stage.clientHeight + ' canvas ' + sizePx;
